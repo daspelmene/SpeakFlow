@@ -44,25 +44,41 @@ speakflow/
 - **TypeScript** — type safety
 - **Tailwind CSS** — styling
 
-## Run our project locally on your machine
+## Environment Variables (.env)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `POSTGRES_DB` | Database name | `speakflow` |
+| `POSTGRES_USER` | Database user | `admin` |
+| `POSTGRES_PASSWORD` | Database password | `[REDACTED]` |
+| `DATABASE_URL` | PostgreSQL connection string (local) | `postgresql+asyncpg://admin:[REDACTED]@localhost:5433/speakflow` |
+| `SECRET_KEY` | JWT signing key | `***REMOVED***` |
+| `ALGORITHM` | JWT algorithm | `HS256` |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime (minutes) | `30` |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime (days) | `1` |
+
+## Build&Run our project locally on your machine
 
 ```bash
+git clone git@gitlab.pg.innopolis.university:speakflow/speakflow.git && cd speakflow
 docker compose up --build
 ```
 
-| Service | URL |
-|---------|-----|
-| Backend | `http://localhost:8000` |
-| Swagger UI | `http://localhost:8000/docs` |
-| ReDoc | `http://localhost:8000/redoc` |
-| Frontend | `http://localhost:3000` |
+| Service       | URL |
+|---------------|-----|
+| Backend       | `http://localhost:8000` |
+| Swagger UI    | `http://localhost:8000/docs` |
+| ReDoc         | `http://localhost:8000/redoc` |
+| Main app (UI) | `http://localhost:3000` |
 
-### Run frontend locally (dev mode)
+## See our app running on VM
 
-```bash
-cd app/frontend
-npm run dev
-```
+| Service       | URL |
+|---------------|-----|
+| Backend       | `http://10.93.27.41:8000` |
+| Swagger UI    | `http://10.93.27.41:8000/docs` |
+| ReDoc         | `http://10.93.27.41:8000/redoc` |
+| Main app (UI) | `http://10.93.27.41:3000/` |
 
 ## Testing
 
