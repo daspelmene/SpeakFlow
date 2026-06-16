@@ -44,25 +44,25 @@ speakflow/
 - **TypeScript** — type safety
 - **Tailwind CSS** — styling
 
-## Run with Docker (backend only)
+## Run our project locally on your machine
 
 ```bash
 docker compose up --build
 ```
 
-Backend will be available at `http://localhost:8000`.
+| Service | URL |
+|---------|-----|
+| Backend | `http://localhost:8000` |
+| Swagger UI | `http://localhost:8000/docs` |
+| ReDoc | `http://localhost:8000/redoc` |
+| Frontend | `http://localhost:3000` |
 
-Swagger UI: `http://localhost:8000/docs`
-ReDoc: `http://localhost:8000/redoc`
-
-## Run frontend (dev mode)
+### Run frontend locally (dev mode)
 
 ```bash
 cd app/frontend
 npm run dev
 ```
-
-Frontend will be available at `http://localhost:3000`.
 
 ## Testing
 
