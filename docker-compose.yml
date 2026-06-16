@@ -34,6 +34,21 @@ services:
       - "8000:8000"
     restart: unless-stopped
 
+  frontend:
+    build:
+      context: app/frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://backend:8000
+    container_name: frontend
+    depends_on:
+      - backend
+    hostname:
+      frontend
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
 volumes:
   postgres_data:
     name: postgres_data
