@@ -1,0 +1,12 @@
+.git/
+.gitignore
+.env
+.venv/
+.idea/
+__pycache__/
+*.pyc
+.pytest_cache/
+docs/
+k8s/
+node_modules/
+.next/
