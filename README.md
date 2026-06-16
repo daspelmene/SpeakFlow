@@ -9,42 +9,68 @@ A web platform for structured foreign language speaking practice between people 
 ```
 speakflow/
 ├── app/
-│   └── backend/
-│       ├── alembic/          # DB migrations
-│       ├── config/           # Settings (DATABASE_URL, SECRET_KEY, etc.)
-│       ├── handlers/         # FastAPI routes + Server
-│       │   ├── routes/       # auth.py, user.py
-│       │   └── server/       # Server (FastAPI) class
-│       ├── models/           # SQLAlchemy ORM models
-│       ├── schemas/          # Pydantic request/response schemas
-│       ├── storage/          # Database (engine, get_db) + UserRepository
-│       ├── utils/            # hasher.py, jwt.py
-│       ├── Dockerfile
-│       ├── entrypoint.sh
-│       ├── main.py           # Entry point (uvicorn target)
-│       └── requirements.txt
-├── app/tests/                # pytest tests
+│   ├── backend/               # FastAPI backend
+│   │   ├── alembic/           # DB migrations
+│   │   ├── config/            # Settings (DATABASE_URL, SECRET_KEY, etc.)
+│   │   ├── handlers/          # FastAPI routes + Server
+│   │   │   ├── routes/        # auth.py, user.py
+│   │   │   └── server/        # Server (FastAPI) class
+│   │   ├── models/            # SQLAlchemy ORM models
+│   │   ├── schemas/           # Pydantic request/response schemas
+│   │   ├── storage/           # Database (engine, get_db) + UserRepository
+│   │   ├── utils/             # hasher.py, jwt.py
+│   │   ├── Dockerfile
+│   │   ├── entrypoint.sh
+│   │   ├── main.py            # Entry point (uvicorn target)
+│   │   └── requirements.txt
+│   ├── frontend/              # Next.js frontend
+│   └── tests/                 # pytest tests
 ├── docker-compose.yml
-└── .env                      # Environment variables
+└── .env                       # Environment variables
 ```
 
 ## Tech Stack
 
+### Backend
 - **FastAPI** — REST API
 - **SQLAlchemy 2.0** (async) + **asyncpg** — database
 - **PostgreSQL** — database
 - **JWT** (python-jose) — access + refresh token auth
 - **passlib[bcrypt]** — password hashing
-- **Docker** / **docker-compose** — containerization
 - **pytest** + **pytest-asyncio** + **httpx** — testing
 
-## Run with Docker
+### Frontend
+- **Next.js** — React framework
+- **TypeScript** — type safety
+- **Tailwind CSS** — styling
+
+## Run with Docker (backend only)
 
 ```bash
 docker compose up --build
 ```
 
-Server will be available at `http://localhost:8000`.
+Backend will be available at `http://localhost:8000`.
+
+Swagger UI: `http://localhost:8000/docs`
+ReDoc: `http://localhost:8000/redoc`
+
+## Run frontend (dev mode)
+
+```bash
+cd app/frontend
+npm run dev
+```
+
+Frontend will be available at `http://localhost:3000`.
+
+## Testing
+
+```bash
+PYTHONPATH=. pytest app/tests/test_auth.py -v
+```
+
+Requires a running PostgreSQL instance (test skips if database is unavailable).
 
 ## API Endpoints
 
