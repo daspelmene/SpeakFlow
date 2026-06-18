@@ -1,4 +1,4 @@
-from app.backend.models.base import Base
+from backend.models.base import Base
 from datetime import datetime
 from typing import Optional
 from sqlalchemy.dialects.postgresql import JSONB

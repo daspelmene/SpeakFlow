@@ -4,8 +4,8 @@ from logging.config import fileConfig
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
-from app.backend.config.config import settings
-from app.backend.models import Base
+from backend.config.config import settings
+from backend.models import Base
 
 config = context.config
 

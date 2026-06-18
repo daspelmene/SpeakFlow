@@ -1,7 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
 
-from app.backend.handlers.routes import v1_router
+from backend.handlers.routes import v1_router
 
 
 class Server:
