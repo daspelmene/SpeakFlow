@@ -46,22 +46,24 @@ speakflow/
 
 ## Environment Variables (.env)
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `POSTGRES_DB` | Database name | `speakflow` |
-| `POSTGRES_USER` | Database user | `admin` |
-| `POSTGRES_PASSWORD` | Database password | `12345` |
-| `DATABASE_URL` | PostgreSQL connection string (local) | `postgresql+asyncpg://admin:12345@localhost:5433/speakflow` |
-| `SECRET_KEY` | JWT signing key | `841ca35892683bb79ed7a92cdf99b9d417b73af7a2080f9eb5c411f1960bde36` |
-| `ALGORITHM` | JWT algorithm | `HS256` |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime (minutes) | `30` |
-| `REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime (days) | `1` |
+| Variable | Description |
+|----------|-------------|
+| `POSTGRES_DB` | Database name |
+| `POSTGRES_USER` | Database user |
+| `POSTGRES_PASSWORD` | Database password |
+| `DATABASE_URL` | PostgreSQL connection string (local) |
+| `SECRET_KEY` | JWT signing key |
+| `ALGORITHM` | JWT algorithm |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime (minutes) |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime (days) |
 
-## Build&Run our project locally on your machine
+## Build & Run on your machine
 
 ```bash
-git clone git@gitlab.pg.innopolis.university:speakflow/speakflow.git && cd speakflow
-docker compose up --build
+# Clone the repository
+git clone https://gitlab.pg.innopolis.university/speakflow/speakflow.git
+# Build and run
+./install.sh
 ```
 
 | Service       | URL |
