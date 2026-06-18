@@ -63,6 +63,7 @@ speakflow/
 # Clone the repository
 git clone https://gitlab.pg.innopolis.university/speakflow/speakflow.git
 # Build and run
+cd speakflow
 ./install.sh
 ```
 
