@@ -1,1 +1,1 @@
-from app.backend.handlers.server.server import Server
+from backend.handlers.server.server import Server

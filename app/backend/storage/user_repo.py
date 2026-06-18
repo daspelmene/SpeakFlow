@@ -3,7 +3,7 @@ from datetime import datetime
 
 from sqlalchemy import select
 
-from app.backend.models.user import User
+from backend.models.user import User
 from sqlalchemy.ext.asyncio import AsyncSession
 
 

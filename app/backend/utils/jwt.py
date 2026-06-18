@@ -5,8 +5,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 
-from app.backend.config.config import settings
-from app.backend.storage.database import Database
+from backend.config.config import settings
+from backend.storage.database import Database
 
 security = HTTPBearer()
 
