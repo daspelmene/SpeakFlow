@@ -29,10 +29,10 @@ class TestUserFlow:
         body = r.json()
         assert body["email"] == REGISTER_DATA["email"]
         assert body["fullname"] == REGISTER_DATA["fullname"]
-        assert body["native_language"] == REGISTER_DATA["native_language"]
-        assert body["target_language"] == REGISTER_DATA["target_language"]
-        assert body["interests"] == REGISTER_DATA["interests"]
-        assert body["bio"] == REGISTER_DATA["bio"]
+        assert body["native_language"] is None
+        assert body["target_language"] is None
+        assert body["interests"] == []
+        assert body["bio"] is None
         assert body["is_active"] is True
         assert "id" in body
         assert "created_at" in body

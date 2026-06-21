@@ -11,8 +11,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(nullable=False)
     fullname: Mapped[str] = mapped_column(nullable=False)
-    native_language: Mapped[str] = mapped_column(nullable=False, index=True)
-    target_language: Mapped[str] = mapped_column(nullable=False, index=True)
+    native_language: Mapped[Optional[str]] = mapped_column(nullable=True, index=True)
+    target_language: Mapped[Optional[str]] = mapped_column(nullable=True, index=True)
     interests: Mapped[Optional[list[str]]] = mapped_column(JSONB, default=list)
     bio: Mapped[Optional[str]]
     is_active: Mapped[bool] = mapped_column(default=True)
