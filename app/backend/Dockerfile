@@ -1,5 +1,7 @@
 FROM python:3.14.0-slim-trixie
 
+RUN apt-get update && apt-get install -y lame && rm -rf /var/lib/apt/lists/*
+
 RUN adduser --disabled-password app
 
 WORKDIR /app
