@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: default
+data:
+  jwt_algorithm: "HS256"
+  jwt_access_token_expire_min: "30"
+  jwt_refresh_token_expire_days: "1"

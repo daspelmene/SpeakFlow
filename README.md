@@ -51,18 +51,18 @@ speakflow/
 | `POSTGRES_DB` | Database name |
 | `POSTGRES_USER` | Database user |
 | `POSTGRES_PASSWORD` | Database password |
-| `DATABASE_URL` | PostgreSQL connection string (local) |
-| `SECRET_KEY` | JWT signing key |
-| `ALGORITHM` | JWT algorithm |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime (minutes) |
-| `REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime (days) |
+| `JWT_SECRET_KEY` | JWT signing key |
+| `JWT_ALGORITHM` | JWT algorithm |
+| `JWT_ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime (minutes) |
+| `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime (days) |
 
-## Build & Run on your machine
+## Build & Run on your machine with Docker Compose
 
 ```bash
 # Clone the repository
 git clone https://gitlab.pg.innopolis.university/speakflow/speakflow.git
 # Build and run
+cd speakflow
 ./install.sh
 ```
 
@@ -73,14 +73,31 @@ git clone https://gitlab.pg.innopolis.university/speakflow/speakflow.git
 | ReDoc         | `http://localhost:8000/redoc` |
 | Main app (UI) | `http://localhost:3000` |
 
+## Run on your machine with Kubernetes
+
+```bash
+# Clone the repository
+git clone https://gitlab.pg.innopolis.university/speakflow/speakflow.git
+# Build and run
+cd speakflow
+kubectl apply -k k8s/base/
+```
+
+| Service       | URL |
+|---------------|-----|
+| Backend       | `https://localhost:8000` |
+| Swagger UI    | `https://localhost:8000/docs` |
+| ReDoc         | `https://localhost:8000/redoc` |
+| Main app (UI) | `https://localhost` |
+
 ## See our app running on VM
 
 | Service       | URL |
 |---------------|-----|
-| Backend       | `http://10.93.27.41:8000` |
-| Swagger UI    | `http://10.93.27.41:8000/docs` |
-| ReDoc         | `http://10.93.27.41:8000/redoc` |
-| Main app (UI) | `http://10.93.27.41:3000/` |
+| Backend       | `https://10.93.27.41:8000` |
+| Swagger UI    | `https://10.93.27.41:8000/docs` |
+| ReDoc         | `https://10.93.27.41:8000/redoc` |
+| Main app (UI) | `https://10.93.27.41/` |
 
 ## Testing
 
