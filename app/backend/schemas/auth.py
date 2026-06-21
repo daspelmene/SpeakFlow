@@ -5,10 +5,6 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     fullname: str
-    native_language: str
-    target_language: str
-    interests: list[str] = []
-    bio: str | None = None
 
 
 class LoginRequest(BaseModel):

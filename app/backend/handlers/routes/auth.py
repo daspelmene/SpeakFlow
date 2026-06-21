@@ -19,10 +19,6 @@ async def register(data: RegisterRequest, db: Database = Depends(Database.get_db
         "email": data.email,
         "password_hash": password_hash,
         "fullname": data.fullname,
-        "native_language": data.native_language,
-        "target_language": data.target_language,
-        "interests": data.interests,
-        "bio": data.bio,
     })
 
     access_token = create_access_token({"sub": str(user.id)})
