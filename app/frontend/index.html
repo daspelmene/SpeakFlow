@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Audio Room</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); min-height: 100vh; display: flex; justify-content: center; align-items: center; color: #fff; }
+        .container { background: #1e1e3a; border-radius: 20px; padding: 36px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); width: 440px; max-width: 95%; }
+        h1 { text-align: center; margin-bottom: 4px; font-size: 26px; color: #e0e0ff; }
+        .subtitle { text-align: center; color: #888; font-size: 13px; margin-bottom: 24px; }
+        .section { margin-bottom: 16px; }
+        label { display: block; font-size: 12px; font-weight: 600; color: #aaa; margin-bottom: 4px; }
+        input { width: 100%; padding: 12px 16px; border: 2px solid #333; border-radius: 12px; font-size: 15px; background: #2a2a4a; color: #fff; }
+        input:focus { outline: none; border-color: #667eea; }
+        button { width: 100%; padding: 13px; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; color: white; margin-bottom: 10px; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .create-btn { background: linear-gradient(135deg, #667eea, #764ba2); }
+        .join-btn { background: linear-gradient(135deg, #43e97b, #38f9d7); color: #1a1a2e; }
+        .leave-btn { background: linear-gradient(135deg, #f093fb, #f5576c); }
+        .status-bar { padding: 12px; border-radius: 12px; text-align: center; font-size: 13px; font-weight: 500; margin-bottom: 12px; }
+        .connected { background: #1a3a2a; color: #4caf50; }
+        .disconnected { background: #3a1a1a; color: #f44336; }
+        .connecting { background: #3a3a1a; color: #ffc107; }
+        .room-id-display { background: #2a2a4a; padding: 10px 14px; border-radius: 10px; font-family: monospace; font-size: 20px; text-align: center; letter-spacing: 3px; color: #667eea; font-weight: bold; margin-bottom: 12px; }
+        .vu-meter { height: 6px; background: #333; border-radius: 3px; margin: 10px 0; overflow: hidden; }
+        .vu-fill { height: 100%; background: linear-gradient(90deg, #4caf50, #ff9800, #f44336); width: 0%; transition: width 0.05s; border-radius: 3px; }
+        #remoteAudioContainer { margin-top: 10px; }
+        #remoteAudioContainer audio { width: 100%; height: 40px; margin-top: 8px; border-radius: 8px; }
+        .info { text-align: center; font-size: 12px; color: #666; margin-top: 14px; }
+        .info a { color: #667eea; font-weight: 600; }
+        .hidden { display: none; }
+        .token-section { margin-bottom: 20px; padding: 16px; background: #252545; border-radius: 12px; }
+        .log-box { margin-top: 12px; padding: 10px; background: #111; border-radius: 8px; font-family: monospace; font-size: 11px; color: #4caf50; max-height: 120px; overflow-y: auto; line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎤 Audio Room</h1>
+        <p class="subtitle">Secure voice communication</p>
+        
+        <div id="authSection" class="token-section">
+            <div class="section"><label>JWT Access Token</label><input type="text" id="tokenInput" placeholder="Paste your access token here"></div>
+            <button class="create-btn" onclick="setToken()">🔑 Set Token</button>
+        </div>
+        
+        <div id="roomSection" class="hidden">
+            <div id="setupSection">
+                <button class="create-btn" onclick="createRoom()">🏠 Create Room</button>
+                <div class="section" style="margin-top:16px;"><label>Room ID (to join)</label><input type="text" id="roomIdInput" placeholder="Paste room ID" maxlength="10"></div>
+                <button class="join-btn" onclick="joinRoom()">🚪 Join Room</button>
+            </div>
+            <div id="connectedSection" class="hidden">
+                <label>Share this Room ID</label>
+                <div class="room-id-display" id="roomIdDisplay"></div>
+                <div class="status-bar disconnected" id="status">Not connected</div>
+                <div class="vu-meter"><div class="vu-fill" id="vuFill"></div></div>
+                <div id="remoteAudioContainer"></div>
+                <button class="leave-btn" onclick="leaveRoom()">👋 Leave Room</button>
+            </div>
+            <div class="log-box" id="logBox"></div>
+        </div>
+        <div class="info"><p>📁 Recordings saved on server</p></div>
+    </div>
+
+    <script>
+        const SERVER = 'http://localhost:8000/api/v1';
+        let token = localStorage.getItem('jwt_token') || '';
+        let pc = null, roomId = null, userSlot = null;
+        let localStream = null, audioCtx = null, vuInterval = null, pollInterval = null;
+        
+        if (token) { document.getElementById('tokenInput').value = token; showRoomSection(); }
+        
+        function log(msg) {
+            console.log(msg);
+            const box = document.getElementById('logBox');
+            box.innerHTML += '[' + new Date().toLocaleTimeString() + '] ' + msg + '<br>';
+            box.scrollTop = box.scrollHeight;
+        }
+        
+        function setToken() {
+            token = document.getElementById('tokenInput').value.trim();
+            if (!token) return alert('Enter token');
+            localStorage.setItem('jwt_token', token);
+            showRoomSection();
+        }
+        
+        function showRoomSection() {
+            document.getElementById('authSection').classList.add('hidden');
+            document.getElementById('roomSection').classList.remove('hidden');
+            log('✅ Authenticated');
+        }
+        
+        function authHeaders() {
+            return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+        }
+        
+        function updateStatus(msg, type) {
+            document.getElementById('status').textContent = msg;
+            document.getElementById('status').className = 'status-bar ' + type;
+        }
+        
+        function startVUMeter(stream) {
+            try {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const a = audioCtx.createAnalyser(); a.fftSize = 256;
+                audioCtx.createMediaStreamSource(stream).connect(a);
+                const d = new Uint8Array(a.frequencyBinCount), vu = document.getElementById('vuFill');
+                vuInterval = setInterval(() => { a.getByteFrequencyData(d); let s=0; for(let i=0;i<d.length;i++) s+=d[i]; vu.style.width = Math.min(100,Math.round((s/d.length/128)*100))+'%'; }, 50);
+                log('🎤 Mic active');
+            } catch(e) { log('VU error: '+e); }
+        }
+        
+        function stopVUMeter() {
+            if(vuInterval){clearInterval(vuInterval);vuInterval=null;}
+            if(audioCtx){audioCtx.close().catch(()=>{});audioCtx=null;}
+            document.getElementById('vuFill').style.width='0%';
+        }
+        
+        async function sendOffer() {
+            const offer = await pc.createOffer({ offerToReceiveAudio: true });
+            await pc.setLocalDescription(offer);
+            const resp = await fetch(`${SERVER}/audio/offer`, {
+                method:'POST', headers: authHeaders(),
+                body:JSON.stringify({ sdp: pc.localDescription.sdp, type: pc.localDescription.type, roomId, userSlot })
+            });
+            const answer = await resp.json();
+            await pc.setRemoteDescription(new RTCSessionDescription(answer));
+        }
+        
+        async function checkRenegotiate() {
+            try {
+                const r = await fetch(`${SERVER}/audio/should-renegotiate?roomId=${roomId}&userSlot=${userSlot}`, { headers: authHeaders() });
+                const data = await r.json();
+                if (data.renegotiate) {
+                    log('🔄 Renegotiating...');
+                    await sendOffer();
+                }
+            } catch(e) {}
+        }
+        
+        async function doWebRTC() {
+            localStream = await navigator.mediaDevices.getUserMedia({
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false
+            });
+            startVUMeter(localStream);
+            log('📡 Creating peer connection...');
+            
+            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            localStream.getAudioTracks().forEach(t => {
+                log('➕ Track: ' + t.label);
+                pc.addTrack(t, localStream);
+            });
+            
+            pc.ontrack = (e) => {
+                log('📥 ontrack! kind=' + e.track.kind + ' streams=' + e.streams.length);
+                if (e.track.kind === 'audio' && e.streams[0]) {
+                    const c = document.getElementById('remoteAudioContainer'); c.innerHTML = '';
+                    const a = document.createElement('audio');
+                    a.srcObject = e.streams[0]; a.autoplay = true; a.controls = true;
+                    a.style.cssText = 'width:100%;height:40px;margin-top:8px;';
+                    a.onplay = () => log('▶️ Audio playing');
+                    c.appendChild(a);
+                    updateStatus('🟢 Connected - Hearing!', 'connected');
+                    log('🎧 Remote audio added');
+                }
+            };
+            
+            pc.onconnectionstatechange = () => {
+                log('State: ' + pc.connectionState);
+                if (pc.connectionState === 'connected') updateStatus('🟢 Connected', 'connected');
+                else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') updateStatus('🔴 Disconnected', 'disconnected');
+            };
+            
+            pc.oniceconnectionstatechange = () => log('ICE: ' + pc.iceConnectionState);
+            
+            pc.onicecandidate = (e) => {
+                if (e.candidate) {
+                    fetch(`${SERVER}/audio/ice-candidate`, {
+                        method:'POST', headers: authHeaders(),
+                        body:JSON.stringify({ roomId, userSlot, candidate: { candidate:e.candidate.candidate, sdpMid:e.candidate.sdpMid, sdpMLineIndex:e.candidate.sdpMLineIndex } })
+                    }).catch(()=>{});
+                }
+            };
+            
+            log('📤 Sending initial offer...');
+            await sendOffer();
+            log('✅ WebRTC setup complete');
+        }
+        
+        async function createRoom() {
+            updateStatus('Creating room...', 'connecting');
+            try {
+                const r = await fetch(`${SERVER}/audio/create-room`, { method:'POST', headers: authHeaders() });
+                roomId = (await r.json()).roomId;
+                log('🏠 Room: ' + roomId);
+                
+                const j = await (await fetch(`${SERVER}/audio/join`, {
+                    method:'POST', headers: authHeaders(), body:JSON.stringify({ roomId })
+                })).json();
+                userSlot = j.userSlot;
+                log('👤 Slot: ' + userSlot);
+                
+                await doWebRTC();
+                document.getElementById('setupSection').classList.add('hidden');
+                document.getElementById('connectedSection').classList.remove('hidden');
+                document.getElementById('roomIdDisplay').textContent = roomId;
+                updateStatus('🟡 Waiting for partner...', 'connecting');
+                pollInterval = setInterval(checkRenegotiate, 2000);
+                log('⏳ Polling for renegotiation...');
+            } catch(e) { log('❌ Error: '+e.message); updateStatus('Error: '+e.message, 'disconnected'); }
+        }
+        
+        async function joinRoom() {
+            roomId = document.getElementById('roomIdInput').value.trim();
+            if (!roomId) return alert('Enter room ID');
+            updateStatus('Joining...', 'connecting');
+            try {
+                const r = await fetch(`${SERVER}/audio/join`, {
+                    method:'POST', headers: authHeaders(), body:JSON.stringify({ roomId })
+                });
+                if (!r.ok) throw new Error((await r.json()).error || 'Failed');
+                userSlot = (await r.json()).userSlot;
+                log('👤 Slot: ' + userSlot);
+                
+                await doWebRTC();
+                document.getElementById('setupSection').classList.add('hidden');
+                document.getElementById('connectedSection').classList.remove('hidden');
+                document.getElementById('roomIdDisplay').textContent = roomId;
+                updateStatus('🟡 Waiting for partner...', 'connecting');
+                pollInterval = setInterval(checkRenegotiate, 2000);
+                log('⏳ Polling for renegotiation...');
+            } catch(e) { log('❌ Error: '+e.message); updateStatus('Error: '+e.message, 'disconnected'); }
+        }
+        
+        async function leaveRoom() {
+            if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+            if (roomId) {
+                fetch(`${SERVER}/audio/disconnect`, { method:'POST', headers: authHeaders(), body:JSON.stringify({ roomId }) }).catch(()=>{});
+            }
+            cleanup();
+            document.getElementById('setupSection').classList.remove('hidden');
+            document.getElementById('connectedSection').classList.add('hidden');
+            updateStatus('Disconnected', 'disconnected');
+            log('👋 Left room');
+        }
+        
+        function cleanup() {
+            stopVUMeter();
+            if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+            if (pc) { pc.close(); pc = null; }
+            if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
+            document.getElementById('remoteAudioContainer').innerHTML = '';
+            roomId = null; userSlot = null;
+        }
+        
+        window.addEventListener('beforeunload', () => {
+            if (roomId) navigator.sendBeacon(`${SERVER}/audio/disconnect`, JSON.stringify({ roomId }));
+            cleanup();
+        });
+    </script>
+</body>
+</html>
