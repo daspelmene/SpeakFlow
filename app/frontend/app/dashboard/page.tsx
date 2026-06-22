@@ -1,4 +1,8 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import PageContainer from "@/components/layout/PageContainer";
 import Badge from "@/components/ui/Badge";
@@ -9,6 +13,9 @@ import {
   mockOutgoingInvitations,
 } from "@/lib/mockData";
 import type { InvitationStatus, SessionInvitation } from "@/lib/types";
+import { getCurrentUser } from "@/lib/api";
+import { clearTokens, getAccessToken } from "@/lib/auth";
+import { isProfileComplete } from "@/lib/profile";
 
 type InvitationType = "incoming" | "outgoing";
 
@@ -274,6 +281,36 @@ function InvitationCard({
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const [isCheckingAccess, setIsCheckingAccess] = useState(true);
+
+  useEffect(() => {
+    async function checkDashboardAccess() {
+      const token = getAccessToken();
+
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      try {
+        const user = await getCurrentUser();
+
+        if (!isProfileComplete(user)) {
+          router.replace("/profile/setup");
+          return;
+        }
+
+        setIsCheckingAccess(false);
+      } catch {
+        clearTokens();
+        router.replace("/login");
+      }
+    }
+
+    checkDashboardAccess();
+  }, [router]);
+
   const activeSession = getActiveSessionInvitation();
   const activeSessionInvitation = activeSession?.invitation;
 
@@ -288,6 +325,20 @@ export default function DashboardPage() {
     "outgoing",
     activeSessionInvitation,
   );
+
+  if (isCheckingAccess) {
+    return (
+      <PageContainer>
+        <div className="mx-auto max-w-2xl">
+          <Card>
+            <p className="text-center text-lg font-semibold text-slate-600">
+              Checking your profile...
+            </p>
+          </Card>
+        </div>
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer>

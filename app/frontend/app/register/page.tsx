@@ -4,27 +4,13 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import PageContainer from "@/components/layout/PageContainer";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
-import Select from "@/components/ui/Select";
-import PageContainer from "@/components/layout/PageContainer";
 import { registerUser } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
-
-const languageOptions = [
-  "English",
-  "Russian",
-  "Spanish",
-  "French",
-  "German",
-  "Chinese",
-  "Japanese",
-  "Korean",
-  "Italian",
-  "Portuguese",
-];
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -33,8 +19,6 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [nativeLanguage, setNativeLanguage] = useState("");
-  const [targetLanguage, setTargetLanguage] = useState("");
 
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,18 +38,6 @@ export default function RegisterPage() {
 
     if (password !== confirmPassword) {
       return "Passwords do not match.";
-    }
-
-    if (!nativeLanguage) {
-      return "Native language is required.";
-    }
-
-    if (!targetLanguage) {
-      return "Target language is required.";
-    }
-
-    if (nativeLanguage === targetLanguage) {
-      return "Native language and target language should be different.";
     }
 
     return "";
@@ -88,14 +60,7 @@ export default function RegisterPage() {
       const tokens = await registerUser({
         email,
         password,
-        fullname,
-        native_language: nativeLanguage,
-        target_language: targetLanguage,
-
-        // These fields belong to profile setup,
-        // but backend schema accepts them during registration.
-        interests: [],
-        bio: null,
+        fullname: fullname.trim(),
       });
 
       saveTokens(tokens);
@@ -123,8 +88,8 @@ export default function RegisterPage() {
           </h1>
 
           <p className="mt-3 text-slate-600">
-            Start with your basic account details. You will finish your profile
-            in the next step.
+            Create an account first. You will complete your language profile in
+            the next step.
           </p>
         </div>
 
@@ -163,24 +128,8 @@ export default function RegisterPage() {
               />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Select
-                label="Native language"
-                options={languageOptions}
-                value={nativeLanguage}
-                onChange={(event) => setNativeLanguage(event.target.value)}
-              />
-
-              <Select
-                label="Target language"
-                options={languageOptions}
-                value={targetLanguage}
-                onChange={(event) => setTargetLanguage(event.target.value)}
-              />
-            </div>
-
             {error && (
-              <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-base font-semibold text-red-700">
                 {error}
               </div>
             )}

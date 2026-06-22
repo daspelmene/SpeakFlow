@@ -11,7 +11,7 @@ import Input from "@/components/ui/Input";
 import Select from "@/components/ui/Select";
 import Textarea from "@/components/ui/Textarea";
 import { getCurrentUser, updateCurrentUser } from "@/lib/api";
-import { getAccessToken } from "@/lib/auth";
+import { clearTokens, getAccessToken } from "@/lib/auth";
 
 const languageOptions = [
   "English",
@@ -43,15 +43,12 @@ const suggestedInterests = [
   "Science",
 ];
 
-const MOCK_PROFILE_KEY = "speakflow_mock_profile_setup";
-
 export default function ProfileSetupPage() {
   const router = useRouter();
 
   const [fullname, setFullname] = useState("");
   const [nativeLanguage, setNativeLanguage] = useState("");
   const [targetLanguage, setTargetLanguage] = useState("");
-
   const [bio, setBio] = useState("");
   const [interestInput, setInterestInput] = useState("");
   const [interests, setInterests] = useState<string[]>([]);
@@ -59,34 +56,13 @@ export default function ProfileSetupPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isMockMode, setIsMockMode] = useState(false);
 
   useEffect(() => {
     async function loadProfile() {
       const token = getAccessToken();
 
       if (!token) {
-        setIsMockMode(true);
-
-        const savedMockProfile = localStorage.getItem(MOCK_PROFILE_KEY);
-
-        if (savedMockProfile) {
-          const parsedProfile = JSON.parse(savedMockProfile);
-
-          setFullname(parsedProfile.fullname || "Demo User");
-          setNativeLanguage(parsedProfile.native_language || "");
-          setTargetLanguage(parsedProfile.target_language || "");
-          setBio(parsedProfile.bio || "");
-          setInterests(parsedProfile.interests || []);
-        } else {
-          setFullname("Demo User");
-          setNativeLanguage("");
-          setTargetLanguage("");
-          setBio("");
-          setInterests([]);
-        }
-
-        setIsLoading(false);
+        router.replace("/login");
         return;
       }
 
@@ -99,19 +75,22 @@ export default function ProfileSetupPage() {
         setBio(user.bio || "");
         setInterests(user.interests || []);
       } catch (loadError) {
+        clearTokens();
+
         const message =
           loadError instanceof Error
             ? loadError.message
             : "Failed to load profile.";
 
         setError(message);
+        router.replace("/login");
       } finally {
         setIsLoading(false);
       }
     }
 
     loadProfile();
-  }, []);
+  }, [router]);
 
   function addInterest(value: string) {
     const normalizedInterest = value.trim();
@@ -183,24 +162,6 @@ export default function ProfileSetupPage() {
     try {
       setIsSubmitting(true);
 
-      const token = getAccessToken();
-
-      if (!token) {
-        localStorage.setItem(
-          MOCK_PROFILE_KEY,
-          JSON.stringify({
-            fullname,
-            native_language: nativeLanguage,
-            target_language: targetLanguage,
-            interests,
-            bio: bio.trim(),
-          }),
-        );
-
-        router.push("/dashboard");
-        return;
-      }
-
       await updateCurrentUser({
         native_language: nativeLanguage,
         target_language: targetLanguage,
@@ -249,13 +210,6 @@ export default function ProfileSetupPage() {
             Add your languages, interests, and a short bio so SpeakFlow can
             suggest better speaking partners.
           </p>
-
-          {isMockMode && (
-            <p className="mx-auto mt-5 max-w-2xl rounded-2xl bg-amber-50 px-5 py-4 text-base font-semibold leading-7 text-amber-800 ring-1 ring-amber-100">
-              Demo mode: backend is not connected yet, so profile data will be
-              saved locally.
-            </p>
-          )}
         </div>
 
         <Card className="p-8">
@@ -269,7 +223,7 @@ export default function ProfileSetupPage() {
             </p>
 
             <p className="mt-2 text-lg leading-8 text-slate-600">
-              Choose the languages you want to use for partner matching.
+              Complete this required profile before opening your dashboard.
             </p>
           </div>
 
