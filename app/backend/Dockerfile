@@ -9,8 +9,11 @@ WORKDIR /app
 COPY app/backend/requirements.txt .
 RUN python -m pip install --no-cache-dir -r requirements.txt
 
-COPY --chown=app:app app/ .
-COPY --chown=app:app app/backend/entrypoint.sh .
+COPY app/ .
+COPY app/backend/entrypoint.sh .
+
+RUN mkdir -p /recordings && chown -R app:app /recordings
+RUN chown -R app:app /app
 
 RUN chmod +x entrypoint.sh
 
