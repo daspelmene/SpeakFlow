@@ -4,13 +4,14 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import PageContainer from "@/components/layout/PageContainer";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
-import PageContainer from "@/components/layout/PageContainer";
-import { loginUser } from "@/lib/api";
+import { getCurrentUser, loginUser } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
+import { isProfileComplete } from "@/lib/profile";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -53,7 +54,14 @@ export default function LoginPage() {
       });
 
       saveTokens(tokens);
-      router.push("/dashboard");
+
+      const user = await getCurrentUser();
+
+      if (isProfileComplete(user)) {
+        router.push("/dashboard");
+      } else {
+        router.push("/profile/setup");
+      }
     } catch (submitError) {
       const message =
         submitError instanceof Error ? submitError.message : "Login failed.";
@@ -98,7 +106,7 @@ export default function LoginPage() {
             />
 
             {error && (
-              <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-base font-semibold text-red-700">
                 {error}
               </div>
             )}
