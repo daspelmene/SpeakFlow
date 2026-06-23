@@ -8,7 +8,7 @@ router = APIRouter(prefix="/session-templates", tags=["session-templates"])
 TEMPLATES_FILE = (
     Path(__file__).resolve().parents[2]
     / "resources"
-    / "session_templates.json"
+    / "session_template.json"
 )
 
 

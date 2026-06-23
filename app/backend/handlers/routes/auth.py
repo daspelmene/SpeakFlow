@@ -12,7 +12,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
 async def register(data: RegisterRequest, db: Database = Depends(Database.get_db)):
     existing = await db.users.get_user_by_email(data.email)
     if existing:
-        raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
+        raise HTTPException(status.HTTP_409_CONFLICT, "This email is already registered. Try logging in instead.")
 
     password_hash = Hasher.hash_password(data.password)
     user = await db.users.create_user({
