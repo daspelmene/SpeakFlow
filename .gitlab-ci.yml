@@ -25,8 +25,8 @@ build-backend:
 
   rules:
     - changes:
-      - app/backend/**/*
-      - app/backend/Dockerfile
+        - app/backend/**/*
+        - app/backend/Dockerfile
 
   script:
     - echo "Building backend..."
@@ -38,7 +38,7 @@ build-frontend:
 
   rules:
     - changes:
-      - app/frontend/**/*
+        - app/frontend/**/*
 
   script:
     - echo "Building frontend..."
@@ -52,7 +52,7 @@ lint-backend:python:
 
   rules:
     - changes:
-      - app/backend/**/*
+        - app/backend/**/*
 
   script:
     - echo "Installing ruff..."
@@ -67,7 +67,7 @@ lint-frontend:node:
 
   rules:
     - changes:
-      - app/frontend/**/*
+        - app/frontend/**/*
 
   script:
     - cd app/frontend/
@@ -86,7 +86,6 @@ test-backend:
 
   script:
     - ./install.sh
-    - docker compose run --rm backend sh -c 'PYTHONPATH=app python -m pytest'
-  
+    - docker compose run --rm backend sh -c 'cd /app && PYTHONPATH=/app python -m pytest'
   after_script:
     - docker compose down -v
