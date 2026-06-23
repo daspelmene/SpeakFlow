@@ -10,8 +10,8 @@ export type UserMe = {
   id: number;
   email: string;
   fullname: string;
-  native_language: string;
-  target_language: string;
+  native_language: string | null;
+  target_language: string | null;
   interests: string[];
   bio: string | null;
   is_active: boolean;
@@ -23,10 +23,6 @@ export type RegisterPayload = {
   email: string;
   password: string;
   fullname: string;
-  native_language: string;
-  target_language: string;
-  interests: string[];
-  bio: string | null;
 };
 
 export type LoginPayload = {
@@ -36,8 +32,8 @@ export type LoginPayload = {
 
 export type UpdateProfilePayload = {
   fullname?: string;
-  native_language?: string;
-  target_language?: string;
+  native_language?: string | null;
+  target_language?: string | null;
   interests?: string[];
   bio?: string | null;
 };
@@ -55,7 +51,7 @@ async function request<T>(
   });
 
   if (!response.ok) {
-    let message = "Something went wrong";
+    let message = `Request failed with status ${response.status}`;
 
     try {
       const errorData = await response.json();

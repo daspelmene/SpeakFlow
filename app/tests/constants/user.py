@@ -2,10 +2,6 @@ REGISTER_DATA = {
     "email": "pytest_user@test.com",
     "password": "TestPass123",
     "fullname": "Test User",
-    "native_language": "ru",
-    "target_language": "en",
-    "interests": ["music", "sports"],
-    "bio": "Hello world",
 }
 
 LOGIN_DATA = {

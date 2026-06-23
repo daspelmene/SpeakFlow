@@ -13,8 +13,8 @@ class UserMeResponse(BaseModel):
     id: int
     email: str
     fullname: str
-    native_language: str
-    target_language: str
+    native_language: str | None
+    target_language: str | None
     interests: list[str]
     bio: str | None
     is_active: bool

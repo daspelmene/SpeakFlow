@@ -4,27 +4,28 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import PageContainer from "@/components/layout/PageContainer";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
-import Select from "@/components/ui/Select";
-import PageContainer from "@/components/layout/PageContainer";
 import { registerUser } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
 
-const languageOptions = [
-  "English",
-  "Russian",
-  "Spanish",
-  "French",
-  "German",
-  "Chinese",
-  "Japanese",
-  "Korean",
-  "Italian",
-  "Portuguese",
-];
+type RegisterFieldErrors = {
+  fullname?: string;
+  email?: string;
+  password?: string;
+  confirmPassword?: string;
+};
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function isStrongPassword(password: string) {
+  return password.length >= 8 && /[A-Za-z]/.test(password) && /\d/.test(password);
+}
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -33,69 +34,67 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [nativeLanguage, setNativeLanguage] = useState("");
-  const [targetLanguage, setTargetLanguage] = useState("");
 
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<RegisterFieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  function clearFieldError(field: keyof RegisterFieldErrors) {
+    setFieldErrors((currentErrors) => ({
+      ...currentErrors,
+      [field]: undefined,
+    }));
+  }
+
   function validateForm() {
+    const errors: RegisterFieldErrors = {};
+
     if (!fullname.trim()) {
-      return "Full name is required.";
+      errors.fullname = "Full name is required.";
     }
 
     if (!email.trim()) {
-      return "Email is required.";
+      errors.email = "Email is required.";
+    } else if (!isValidEmail(email)) {
+      errors.email = "Enter a valid email address, for example you@example.com.";
     }
 
-    if (password.length < 6) {
-      return "Password must be at least 6 characters.";
+    if (!password) {
+      errors.password = "Password is required.";
+    } else if (!isStrongPassword(password)) {
+      errors.password =
+        "Password must be at least 8 characters and include letters and numbers.";
     }
 
-    if (password !== confirmPassword) {
-      return "Passwords do not match.";
+    if (!confirmPassword) {
+      errors.confirmPassword = "Please confirm your password.";
+    } else if (password !== confirmPassword) {
+      errors.confirmPassword = "Passwords do not match.";
     }
 
-    if (!nativeLanguage) {
-      return "Native language is required.";
-    }
-
-    if (!targetLanguage) {
-      return "Target language is required.";
-    }
-
-    if (nativeLanguage === targetLanguage) {
-      return "Native language and target language should be different.";
-    }
-
-    return "";
+    return errors;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
 
-    const validationError = validateForm();
+    const validationErrors = validateForm();
 
-    if (validationError) {
-      setError(validationError);
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
       return;
     }
+
+    setFieldErrors({});
 
     try {
       setIsSubmitting(true);
 
       const tokens = await registerUser({
-        email,
+        email: email.trim(),
         password,
-        fullname,
-        native_language: nativeLanguage,
-        target_language: targetLanguage,
-
-        // These fields belong to profile setup,
-        // but backend schema accepts them during registration.
-        interests: [],
-        bio: null,
+        fullname: fullname.trim(),
       });
 
       saveTokens(tokens);
@@ -123,64 +122,72 @@ export default function RegisterPage() {
           </h1>
 
           <p className="mt-3 text-slate-600">
-            Start with your basic account details. You will finish your profile
-            in the next step.
+            Create an account first. You will complete your language profile in
+            the next step.
           </p>
         </div>
 
         <Card>
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} noValidate className="space-y-5">
             <Input
               label="Full name"
+              name="fullname"
               value={fullname}
-              onChange={(event) => setFullname(event.target.value)}
+              onChange={(event) => {
+                setFullname(event.target.value);
+                clearFieldError("fullname");
+              }}
               placeholder="Daniil Agafonov"
+              autoComplete="name"
+              error={fieldErrors.fullname}
             />
 
             <Input
               label="Email"
+              name="email"
               type="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                clearFieldError("email");
+              }}
               placeholder="you@example.com"
+              autoComplete="email"
+              error={fieldErrors.email}
             />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Input
                 label="Password"
+                name="new-password"
                 type="password"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="At least 6 characters"
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  clearFieldError("password");
+                }}
+                placeholder="At least 8 characters"
+                autoComplete="new-password"
+                error={fieldErrors.password}
               />
 
               <Input
                 label="Confirm password"
+                name="confirm-password"
                 type="password"
                 value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
+                onChange={(event) => {
+                  setConfirmPassword(event.target.value);
+                  clearFieldError("confirmPassword");
+                }}
                 placeholder="Repeat password"
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Select
-                label="Native language"
-                options={languageOptions}
-                value={nativeLanguage}
-                onChange={(event) => setNativeLanguage(event.target.value)}
-              />
-
-              <Select
-                label="Target language"
-                options={languageOptions}
-                value={targetLanguage}
-                onChange={(event) => setTargetLanguage(event.target.value)}
+                autoComplete="new-password"
+                error={fieldErrors.confirmPassword}
               />
             </div>
 
             {error && (
-              <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-base font-semibold text-red-700">
                 {error}
               </div>
             )}

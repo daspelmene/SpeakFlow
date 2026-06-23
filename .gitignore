@@ -1,5 +1,16 @@
-.gitignore
+# IDE Settings
 .idea
+.vscode
+
+# Env
 .env
 .venv
+
+# Cache
 __pycache__/
+app/frontend/node_modules
+.next
+
+# Local Testing
+docker-compose-local.yaml
+app/recordings
