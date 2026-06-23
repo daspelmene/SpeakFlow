@@ -57,6 +57,14 @@ function getInitials(name: string) {
   return initials || "U";
 }
 
+type ProfileFieldErrors = {
+  fullname?: string;
+  nativeLanguage?: string;
+  targetLanguage?: string;
+  interests?: string;
+  bio?: string;
+};
+
 export default function ProfilePage() {
   const router = useRouter();
 
@@ -71,6 +79,7 @@ export default function ProfilePage() {
   const [interests, setInterests] = useState<string[]>([]);
 
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<ProfileFieldErrors>({});
   const [successMessage, setSuccessMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -115,6 +124,13 @@ export default function ProfilePage() {
     loadProfile();
   }, [router]);
 
+  function clearFieldError(field: keyof ProfileFieldErrors) {
+    setFieldErrors((currentErrors) => ({
+      ...currentErrors,
+      [field]: undefined,
+    }));
+  }
+
   function addInterest(value: string) {
     const normalizedInterest = value.trim();
 
@@ -132,6 +148,7 @@ export default function ProfilePage() {
       normalizedInterest,
     ]);
     setInterestInput("");
+    clearFieldError("interests");
   }
 
   function removeInterest(interestToRemove: string) {
@@ -148,31 +165,34 @@ export default function ProfilePage() {
   }
 
   function validateForm() {
+    const errors: ProfileFieldErrors = {};
+
     if (!fullname.trim()) {
-      return "Full name is required.";
+      errors.fullname = "Full name is required.";
     }
 
     if (!nativeLanguage) {
-      return "Native language is required.";
+      errors.nativeLanguage = "Native language is required.";
     }
 
     if (!targetLanguage) {
-      return "Target language is required.";
-    }
-
-    if (nativeLanguage === targetLanguage) {
-      return "Native language and target language should be different.";
+      errors.targetLanguage = "Target language is required.";
+    } else if (nativeLanguage && nativeLanguage === targetLanguage) {
+      errors.targetLanguage =
+        "Target language should be different from native language.";
     }
 
     if (interests.length === 0) {
-      return "Add at least one interest.";
+      errors.interests = "Add at least one interest.";
     }
 
-    if (bio.trim().length < 10) {
-      return "Bio should be at least 10 characters.";
+    if (!bio.trim()) {
+      errors.bio = "Bio is required.";
+    } else if (bio.trim().length < 10) {
+      errors.bio = "Bio should be at least 10 characters.";
     }
 
-    return "";
+    return errors;
   }
 
   function startEditing() {
@@ -181,6 +201,7 @@ export default function ProfilePage() {
     }
 
     setError("");
+    setFieldErrors({});
     setSuccessMessage("");
     setIsEditing(true);
   }
@@ -191,6 +212,7 @@ export default function ProfilePage() {
     }
 
     setError("");
+    setFieldErrors({});
     setIsEditing(false);
   }
 
@@ -199,12 +221,14 @@ export default function ProfilePage() {
     setError("");
     setSuccessMessage("");
 
-    const validationError = validateForm();
+    const validationErrors = validateForm();
 
-    if (validationError) {
-      setError(validationError);
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
       return;
     }
+
+    setFieldErrors({});
 
     try {
       setIsSaving(true);
@@ -306,13 +330,17 @@ export default function ProfilePage() {
 
       {isEditing ? (
         <Card className="p-8">
-          <form onSubmit={handleSubmit} className="space-y-7">
+          <form onSubmit={handleSubmit} noValidate className="space-y-7">
             <div className="grid gap-5 sm:grid-cols-2">
               <Input
                 label="Full name"
                 value={fullname}
-                onChange={(event) => setFullname(event.target.value)}
+                onChange={(event) => {
+                  setFullname(event.target.value);
+                  clearFieldError("fullname");
+                }}
                 placeholder="Your full name"
+                error={fieldErrors.fullname}
               />
 
               <Input
@@ -328,16 +356,24 @@ export default function ProfilePage() {
                 label="Native language"
                 options={languageOptions}
                 value={nativeLanguage}
-                onChange={(event) => setNativeLanguage(event.target.value)}
+                onChange={(event) => {
+                  setNativeLanguage(event.target.value);
+                  clearFieldError("nativeLanguage");
+                }}
                 placeholder="Choose your native language"
+                error={fieldErrors.nativeLanguage}
               />
 
               <Select
                 label="Target language"
                 options={languageOptions}
                 value={targetLanguage}
-                onChange={(event) => setTargetLanguage(event.target.value)}
+                onChange={(event) => {
+                  setTargetLanguage(event.target.value);
+                  clearFieldError("targetLanguage");
+                }}
                 placeholder="Choose your target language"
+                error={fieldErrors.targetLanguage}
               />
             </div>
 
@@ -349,9 +385,13 @@ export default function ProfilePage() {
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Input
                   value={interestInput}
-                  onChange={(event) => setInterestInput(event.target.value)}
+                  onChange={(event) => {
+                    setInterestInput(event.target.value);
+                    clearFieldError("interests");
+                  }}
                   onKeyDown={handleInterestKeyDown}
                   placeholder="Type interest and press Enter"
+                  error={fieldErrors.interests}
                 />
 
                 <Button
@@ -395,9 +435,13 @@ export default function ProfilePage() {
             <Textarea
               label="Bio"
               value={bio}
-              onChange={(event) => setBio(event.target.value)}
+              onChange={(event) => {
+                setBio(event.target.value);
+                clearFieldError("bio");
+              }}
               placeholder="Write a short introduction for future speaking partners."
               rows={5}
+              error={fieldErrors.bio}
             />
 
             <div className="flex flex-col gap-3 sm:flex-row">

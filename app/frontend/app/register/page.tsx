@@ -12,6 +12,21 @@ import Input from "@/components/ui/Input";
 import { registerUser } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
 
+type RegisterFieldErrors = {
+  fullname?: string;
+  email?: string;
+  password?: string;
+  confirmPassword?: string;
+};
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function isStrongPassword(password: string) {
+  return password.length >= 8 && /[A-Za-z]/.test(password) && /\d/.test(password);
+}
+
 export default function RegisterPage() {
   const router = useRouter();
 
@@ -21,44 +36,63 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<RegisterFieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  function clearFieldError(field: keyof RegisterFieldErrors) {
+    setFieldErrors((currentErrors) => ({
+      ...currentErrors,
+      [field]: undefined,
+    }));
+  }
+
   function validateForm() {
+    const errors: RegisterFieldErrors = {};
+
     if (!fullname.trim()) {
-      return "Full name is required.";
+      errors.fullname = "Full name is required.";
     }
 
     if (!email.trim()) {
-      return "Email is required.";
+      errors.email = "Email is required.";
+    } else if (!isValidEmail(email)) {
+      errors.email = "Enter a valid email address, for example you@example.com.";
     }
 
-    if (password.length < 6) {
-      return "Password must be at least 6 characters.";
+    if (!password) {
+      errors.password = "Password is required.";
+    } else if (!isStrongPassword(password)) {
+      errors.password =
+        "Password must be at least 8 characters and include letters and numbers.";
     }
 
-    if (password !== confirmPassword) {
-      return "Passwords do not match.";
+    if (!confirmPassword) {
+      errors.confirmPassword = "Please confirm your password.";
+    } else if (password !== confirmPassword) {
+      errors.confirmPassword = "Passwords do not match.";
     }
 
-    return "";
+    return errors;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
 
-    const validationError = validateForm();
+    const validationErrors = validateForm();
 
-    if (validationError) {
-      setError(validationError);
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
       return;
     }
+
+    setFieldErrors({});
 
     try {
       setIsSubmitting(true);
 
       const tokens = await registerUser({
-        email,
+        email: email.trim(),
         password,
         fullname: fullname.trim(),
       });
@@ -94,37 +128,61 @@ export default function RegisterPage() {
         </div>
 
         <Card>
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} noValidate className="space-y-5">
             <Input
               label="Full name"
+              name="fullname"
               value={fullname}
-              onChange={(event) => setFullname(event.target.value)}
+              onChange={(event) => {
+                setFullname(event.target.value);
+                clearFieldError("fullname");
+              }}
               placeholder="Daniil Agafonov"
+              autoComplete="name"
+              error={fieldErrors.fullname}
             />
 
             <Input
               label="Email"
+              name="email"
               type="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                clearFieldError("email");
+              }}
               placeholder="you@example.com"
+              autoComplete="email"
+              error={fieldErrors.email}
             />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <Input
                 label="Password"
+                name="new-password"
                 type="password"
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="At least 6 characters"
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  clearFieldError("password");
+                }}
+                placeholder="At least 8 characters"
+                autoComplete="new-password"
+                error={fieldErrors.password}
               />
 
               <Input
                 label="Confirm password"
+                name="confirm-password"
                 type="password"
                 value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
+                onChange={(event) => {
+                  setConfirmPassword(event.target.value);
+                  clearFieldError("confirmPassword");
+                }}
                 placeholder="Repeat password"
+                autoComplete="new-password"
+                error={fieldErrors.confirmPassword}
               />
             </div>
 
