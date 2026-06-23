@@ -43,6 +43,13 @@ const suggestedInterests = [
   "Science",
 ];
 
+type ProfileSetupFieldErrors = {
+  nativeLanguage?: string;
+  targetLanguage?: string;
+  interests?: string;
+  bio?: string;
+};
+
 export default function ProfileSetupPage() {
   const router = useRouter();
 
@@ -54,6 +61,7 @@ export default function ProfileSetupPage() {
   const [interests, setInterests] = useState<string[]>([]);
 
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<ProfileSetupFieldErrors>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -92,6 +100,13 @@ export default function ProfileSetupPage() {
     loadProfile();
   }, [router]);
 
+  function clearFieldError(field: keyof ProfileSetupFieldErrors) {
+    setFieldErrors((currentErrors) => ({
+      ...currentErrors,
+      [field]: undefined,
+    }));
+  }
+
   function addInterest(value: string) {
     const normalizedInterest = value.trim();
 
@@ -108,7 +123,9 @@ export default function ProfileSetupPage() {
       ...currentInterests,
       normalizedInterest,
     ]);
+
     setInterestInput("");
+    clearFieldError("interests");
   }
 
   function removeInterest(interestToRemove: string) {
@@ -125,39 +142,44 @@ export default function ProfileSetupPage() {
   }
 
   function validateForm() {
+    const errors: ProfileSetupFieldErrors = {};
+
     if (!nativeLanguage) {
-      return "Native language is required.";
+      errors.nativeLanguage = "Native language is required.";
     }
 
     if (!targetLanguage) {
-      return "Target language is required.";
-    }
-
-    if (nativeLanguage === targetLanguage) {
-      return "Native language and target language should be different.";
+      errors.targetLanguage = "Target language is required.";
+    } else if (nativeLanguage && nativeLanguage === targetLanguage) {
+      errors.targetLanguage =
+        "Target language should be different from native language.";
     }
 
     if (interests.length === 0) {
-      return "Add at least one interest.";
+      errors.interests = "Add at least one interest.";
     }
 
-    if (bio.trim().length < 10) {
-      return "Bio should be at least 10 characters.";
+    if (!bio.trim()) {
+      errors.bio = "Bio is required.";
+    } else if (bio.trim().length < 10) {
+      errors.bio = "Bio should be at least 10 characters.";
     }
 
-    return "";
+    return errors;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
 
-    const validationError = validateForm();
+    const validationErrors = validateForm();
 
-    if (validationError) {
-      setError(validationError);
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
       return;
     }
+
+    setFieldErrors({});
 
     try {
       setIsSubmitting(true);
@@ -227,24 +249,32 @@ export default function ProfileSetupPage() {
             </p>
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-7">
+          <form onSubmit={handleSubmit} noValidate className="space-y-7">
             <div className="grid gap-5 sm:grid-cols-2">
               <Select
                 label="Native language"
                 options={languageOptions}
                 value={nativeLanguage}
-                onChange={(event) => setNativeLanguage(event.target.value)}
+                onChange={(event) => {
+                  setNativeLanguage(event.target.value);
+                  clearFieldError("nativeLanguage");
+                }}
                 placeholder="Choose your native language"
                 helperText="The language you can help other learners with."
+                error={fieldErrors.nativeLanguage}
               />
 
               <Select
                 label="Target language"
                 options={languageOptions}
                 value={targetLanguage}
-                onChange={(event) => setTargetLanguage(event.target.value)}
+                onChange={(event) => {
+                  setTargetLanguage(event.target.value);
+                  clearFieldError("targetLanguage");
+                }}
                 placeholder="Choose your target language"
                 helperText="The language you want to practice."
+                error={fieldErrors.targetLanguage}
               />
             </div>
 
@@ -256,9 +286,13 @@ export default function ProfileSetupPage() {
               <div className="flex flex-col gap-3 sm:flex-row">
                 <Input
                   value={interestInput}
-                  onChange={(event) => setInterestInput(event.target.value)}
+                  onChange={(event) => {
+                    setInterestInput(event.target.value);
+                    clearFieldError("interests");
+                  }}
                   onKeyDown={handleInterestKeyDown}
                   placeholder="Type interest and press Enter"
+                  error={fieldErrors.interests}
                 />
 
                 <Button
@@ -302,10 +336,14 @@ export default function ProfileSetupPage() {
             <Textarea
               label="Bio"
               value={bio}
-              onChange={(event) => setBio(event.target.value)}
+              onChange={(event) => {
+                setBio(event.target.value);
+                clearFieldError("bio");
+              }}
               placeholder="Example: I want to practice English speaking and discuss technology, travel, and movies."
               rows={5}
               helperText="Write a short introduction that future speaking partners can read."
+              error={fieldErrors.bio}
             />
 
             {error && (

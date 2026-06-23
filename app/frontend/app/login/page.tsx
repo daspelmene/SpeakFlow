@@ -13,6 +13,15 @@ import { getCurrentUser, loginUser } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
 import { isProfileComplete } from "@/lib/profile";
 
+type LoginFieldErrors = {
+  email?: string;
+  password?: string;
+};
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -20,36 +29,50 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
 
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  function clearFieldError(field: keyof LoginFieldErrors) {
+    setFieldErrors((currentErrors) => ({
+      ...currentErrors,
+      [field]: undefined,
+    }));
+  }
+
   function validateForm() {
+    const errors: LoginFieldErrors = {};
+
     if (!email.trim()) {
-      return "Email is required.";
+      errors.email = "Email is required.";
+    } else if (!isValidEmail(email)) {
+      errors.email = "Enter a valid email address, for example you@example.com.";
     }
 
-    if (!password.trim()) {
-      return "Password is required.";
+    if (!password) {
+      errors.password = "Password is required.";
     }
 
-    return "";
+    return errors;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
 
-    const validationError = validateForm();
+    const validationErrors = validateForm();
 
-    if (validationError) {
-      setError(validationError);
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
       return;
     }
+
+    setFieldErrors({});
 
     try {
       setIsSubmitting(true);
 
       const tokens = await loginUser({
-        email,
+        email: email.trim(),
         password,
       });
 
@@ -88,21 +111,33 @@ export default function LoginPage() {
         </div>
 
         <Card>
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} noValidate className="space-y-5">
             <Input
               label="Email"
+              name="email"
               type="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                clearFieldError("email");
+              }}
               placeholder="you@example.com"
+              autoComplete="email"
+              error={fieldErrors.email}
             />
 
             <Input
               label="Password"
+              name="current-password"
               type="password"
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                clearFieldError("password");
+              }}
               placeholder="Enter your password"
+              autoComplete="current-password"
+              error={fieldErrors.password}
             />
 
             {error && (
