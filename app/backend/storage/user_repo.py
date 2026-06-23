@@ -54,7 +54,7 @@ class UserRepository:
             User.native_language == user.target_language,
             User.target_language == user.native_language,
             User.id != user.id,
-            User.is_active == True,
+            User.is_active,
         )
         result = await self.session.execute(query)
         return result.scalars().all()

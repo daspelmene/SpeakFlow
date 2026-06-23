@@ -4,13 +4,23 @@ import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import PageContainer from "@/components/layout/PageContainer";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import Input from "@/components/ui/Input";
-import PageContainer from "@/components/layout/PageContainer";
-import { loginUser } from "@/lib/api";
+import { getCurrentUser, loginUser } from "@/lib/api";
 import { saveTokens } from "@/lib/auth";
+import { isProfileComplete } from "@/lib/profile";
+
+type LoginFieldErrors = {
+  email?: string;
+  password?: string;
+};
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,41 +29,62 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
 
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  function clearFieldError(field: keyof LoginFieldErrors) {
+    setFieldErrors((currentErrors) => ({
+      ...currentErrors,
+      [field]: undefined,
+    }));
+  }
+
   function validateForm() {
+    const errors: LoginFieldErrors = {};
+
     if (!email.trim()) {
-      return "Email is required.";
+      errors.email = "Email is required.";
+    } else if (!isValidEmail(email)) {
+      errors.email = "Enter a valid email address, for example you@example.com.";
     }
 
-    if (!password.trim()) {
-      return "Password is required.";
+    if (!password) {
+      errors.password = "Password is required.";
     }
 
-    return "";
+    return errors;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError("");
 
-    const validationError = validateForm();
+    const validationErrors = validateForm();
 
-    if (validationError) {
-      setError(validationError);
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors);
       return;
     }
+
+    setFieldErrors({});
 
     try {
       setIsSubmitting(true);
 
       const tokens = await loginUser({
-        email,
+        email: email.trim(),
         password,
       });
 
       saveTokens(tokens);
-      router.push("/dashboard");
+
+      const user = await getCurrentUser();
+
+      if (isProfileComplete(user)) {
+        router.push("/dashboard");
+      } else {
+        router.push("/profile/setup");
+      }
     } catch (submitError) {
       const message =
         submitError instanceof Error ? submitError.message : "Login failed.";
@@ -80,25 +111,37 @@ export default function LoginPage() {
         </div>
 
         <Card>
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} noValidate className="space-y-5">
             <Input
               label="Email"
+              name="email"
               type="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                clearFieldError("email");
+              }}
               placeholder="you@example.com"
+              autoComplete="email"
+              error={fieldErrors.email}
             />
 
             <Input
               label="Password"
+              name="current-password"
               type="password"
               value={password}
-              onChange={(event) => setPassword(event.target.value)}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                clearFieldError("password");
+              }}
               placeholder="Enter your password"
+              autoComplete="current-password"
+              error={fieldErrors.password}
             />
 
             {error && (
-              <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-base font-semibold text-red-700">
                 {error}
               </div>
             )}
