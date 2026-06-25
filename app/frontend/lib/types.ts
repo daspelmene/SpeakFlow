@@ -23,6 +23,8 @@ export interface SessionInvitation {
   partnerName: string;
   partnerNativeLanguage: string;
   partnerTargetLanguage: string;
+  partnerInterests?: string[];
+  partnerBio?: string;
   templateTitle: string;
   status: InvitationStatus;
 

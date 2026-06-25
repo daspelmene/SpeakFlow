@@ -40,11 +40,13 @@ export default function Header() {
     router.push("/login");
   }
 
+  const logoHref = isLoggedIn ? "/dashboard" : "/";
+
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
-        <Link href="/" className="flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600 text-xl font-black text-white shadow-sm">
+      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+        <Link href={logoHref} className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-indigo-600 text-xl font-black text-white shadow-sm">
             S
           </div>
 
@@ -63,7 +65,7 @@ export default function Header() {
             <>
               <Link
                 href="/dashboard"
-                className={`inline-flex min-h-12 items-center justify-center rounded-xl px-5 py-3 text-base font-bold transition-colors hover:bg-slate-100 hover:text-slate-950 ${
+                className={`inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2 text-base font-bold transition-colors hover:bg-slate-100 hover:text-slate-950 ${
                   pathname === "/dashboard"
                     ? "bg-slate-100 text-slate-950"
                     : "text-slate-600"
@@ -74,7 +76,7 @@ export default function Header() {
 
               <Link
                 href="/profile"
-                className={`inline-flex min-h-12 items-center justify-center rounded-xl px-5 py-3 text-base font-bold transition-colors hover:bg-slate-100 hover:text-slate-950 ${
+                className={`inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2 text-base font-bold transition-colors hover:bg-slate-100 hover:text-slate-950 ${
                   pathname.startsWith("/profile")
                     ? "bg-slate-100 text-slate-950"
                     : "text-slate-600"
@@ -86,7 +88,7 @@ export default function Header() {
               <Button
                 type="button"
                 variant="secondary"
-                size="lg"
+                size="md"
                 onClick={handleLogOut}
               >
                 Log out
@@ -96,7 +98,7 @@ export default function Header() {
             <>
               <Link
                 href="/login"
-                className={`inline-flex min-h-12 items-center justify-center rounded-xl px-5 py-3 text-base font-bold transition-colors hover:bg-slate-100 hover:text-slate-950 ${
+                className={`inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2 text-base font-bold transition-colors hover:bg-slate-100 hover:text-slate-950 ${
                   pathname === "/login"
                     ? "bg-slate-100 text-slate-950"
                     : "text-slate-600"
@@ -107,7 +109,7 @@ export default function Header() {
 
               <Link
                 href="/register"
-                className="inline-flex min-h-12 items-center justify-center rounded-xl bg-indigo-600 px-5 py-3 text-base font-bold text-white shadow-sm shadow-indigo-200 transition-colors hover:bg-indigo-700"
+                className="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-5 py-2.5 text-base font-bold text-white shadow-sm shadow-indigo-200 transition-colors hover:bg-indigo-700"
               >
                 Get started
               </Link>

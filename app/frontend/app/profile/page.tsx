@@ -260,7 +260,7 @@ export default function ProfilePage() {
   if (isLoading) {
     return (
       <PageContainer>
-        <Card className="p-8">
+        <Card className="p-7">
           <p className="text-center text-lg font-semibold text-slate-600">
             Loading profile...
           </p>
@@ -272,9 +272,9 @@ export default function ProfilePage() {
   if (error && !user) {
     return (
       <PageContainer>
-        <Card className="p-8">
+        <Card className="p-7">
           <Badge variant="error">Profile error</Badge>
-          <h1 className="mt-5 text-3xl font-black text-slate-950">
+          <h1 className="mt-4 text-3xl font-black text-slate-950">
             Could not load profile
           </h1>
           <p className="mt-3 text-lg leading-8 text-slate-600">{error}</p>
@@ -293,24 +293,24 @@ export default function ProfilePage() {
 
   return (
     <PageContainer>
-      <div className="mb-10 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+      <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <Badge variant={profileIsComplete ? "info" : "warning"}>
             {profileIsComplete ? "Profile" : "Profile incomplete"}
           </Badge>
 
-          <h1 className="mt-5 text-5xl font-black tracking-tight text-slate-950">
+          <h1 className="mt-4 text-4xl font-black tracking-tight text-slate-950">
             Your speaking profile
           </h1>
 
-          <p className="mt-5 max-w-3xl text-xl leading-9 text-slate-600">
+          <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-600">
             View and update your languages, interests, and bio. SpeakFlow uses
             this information to suggest suitable speaking partners.
           </p>
         </div>
 
         {!isEditing && (
-          <Button size="lg" onClick={startEditing}>
+          <Button size="md" onClick={startEditing}>
             Edit profile
           </Button>
         )}
@@ -329,8 +329,8 @@ export default function ProfilePage() {
       )}
 
       {isEditing ? (
-        <Card className="p-8">
-          <form onSubmit={handleSubmit} noValidate className="space-y-7">
+        <Card className="p-7">
+          <form onSubmit={handleSubmit} noValidate className="space-y-6">
             <div className="grid gap-5 sm:grid-cols-2">
               <Input
                 label="Full name"
@@ -462,26 +462,26 @@ export default function ProfilePage() {
         </Card>
       ) : (
         <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
-          <Card className="p-8">
+          <Card className="p-7">
             <div className="flex items-center gap-5">
-              <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-indigo-600 text-3xl font-black text-white shadow-sm shadow-indigo-200">
+              <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-indigo-600 text-2xl font-black text-white shadow-sm shadow-indigo-200">
                 {getInitials(user.fullname)}
               </div>
 
               <div>
-                <h2 className="text-4xl font-black tracking-tight text-slate-950">
+                <h2 className="text-3xl font-black tracking-tight text-slate-950">
                   {user.fullname}
                 </h2>
 
-                <p className="mt-2 text-xl font-semibold text-slate-600">
+                <p className="mt-1 text-lg font-semibold text-slate-600">
                   {user.email}
                 </p>
               </div>
             </div>
 
-            <div className="mt-8 grid gap-4">
+            <div className="mt-7 grid gap-4">
               <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                <p className="text-base font-black uppercase tracking-wide text-slate-400">
+                <p className="text-sm font-black uppercase tracking-wide text-slate-400">
                   Native language
                 </p>
                 <p className="mt-2 text-2xl font-black text-slate-950">
@@ -490,7 +490,7 @@ export default function ProfilePage() {
               </div>
 
               <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                <p className="text-base font-black uppercase tracking-wide text-slate-400">
+                <p className="text-sm font-black uppercase tracking-wide text-slate-400">
                   Target language
                 </p>
                 <p className="mt-2 text-2xl font-black text-indigo-700">
@@ -500,17 +500,17 @@ export default function ProfilePage() {
             </div>
           </Card>
 
-          <Card className="p-8">
-            <h2 className="text-4xl font-black tracking-tight text-slate-950">
+          <Card className="p-7">
+            <h2 className="text-3xl font-black tracking-tight text-slate-950">
               Practice information
             </h2>
 
-            <p className="mt-5 text-xl leading-9 text-slate-600">
+            <p className="mt-4 text-lg leading-8 text-slate-600">
               These details are loaded from your account data and can be updated
               anytime.
             </p>
 
-            <div className="mt-8">
+            <div className="mt-7">
               <h3 className="text-2xl font-black text-slate-950">Interests</h3>
 
               {user.interests.length > 0 ? (
@@ -531,28 +531,28 @@ export default function ProfilePage() {
               )}
             </div>
 
-            <div className="mt-8 rounded-3xl border border-slate-200 bg-slate-50 p-6">
+            <div className="mt-7 rounded-3xl border border-slate-200 bg-slate-50 p-5">
               <h3 className="text-2xl font-black text-slate-950">Bio</h3>
 
-              <p className="mt-4 text-xl leading-9 text-slate-600">
+              <p className="mt-3 text-lg leading-8 text-slate-600">
                 {user.bio || "No bio added yet."}
               </p>
             </div>
 
             {profileIsComplete ? (
-              <div className="mt-8 rounded-3xl border border-emerald-100 bg-emerald-50 p-6">
+              <div className="mt-7 rounded-3xl border border-emerald-100 bg-emerald-50 p-5">
                 <Badge variant="success">Matching summary</Badge>
 
-                <p className="mt-4 text-xl leading-9 text-emerald-900">
+                <p className="mt-4 text-lg leading-8 text-emerald-900">
                   You can help others with {nativeLanguageLabel} and practice{" "}
                   {targetLanguageLabel} with suitable partners.
                 </p>
               </div>
             ) : (
-              <div className="mt-8 rounded-3xl border border-amber-100 bg-amber-50 p-6">
+              <div className="mt-7 rounded-3xl border border-amber-100 bg-amber-50 p-5">
                 <Badge variant="warning">Action needed</Badge>
 
-                <p className="mt-4 text-xl leading-9 text-amber-900">
+                <p className="mt-4 text-lg leading-8 text-amber-900">
                   Complete your languages, interests, and bio before using the
                   dashboard.
                 </p>
