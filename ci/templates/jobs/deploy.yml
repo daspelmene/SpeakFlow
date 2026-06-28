@@ -1,0 +1,48 @@
+deploy-infrastructure:k8s:
+  extends: .ssh-job
+
+  rules:
+    - changes:
+      - k8s/**/*
+
+  script:
+    - |
+      ssh "$SSH_USER@$SSH_HOST" <<EOF
+      if [ -d speakflow/.git ]; then
+        git -C speakflow fetch origin main
+        git -C speakflow reset --hard origin/main
+      else
+        git clone -b main "$REPOSITORY_URL" speakflow
+      fi
+      kubectl apply -k speakflow/k8s/base
+      kubectl rollout restart deployment -n default
+      EOF
+
+
+deploy-backend:
+  extends: .ssh-job
+
+  rules:
+    - changes:
+      - app/backend/**/*
+      - app/backend/Dockerfile
+
+  script:
+    - |
+      ssh "$SSH_USER@$SSH_HOST" <<EOF
+      kubectl rollout restart deployment backend -n default
+      EOF
+
+
+deploy-frontend:
+  extends: .ssh-job
+
+  rules:
+    - changes:
+      - app/frontend/**/*
+
+  script:
+    - |
+      ssh "$SSH_USER@$SSH_HOST" <<EOF
+      kubectl rollout restart deployment frontend -n default
+      EOF
