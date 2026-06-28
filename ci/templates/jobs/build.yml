@@ -1,0 +1,29 @@
+build-backend:
+  stage: build
+  extends: .docker-job
+
+  rules:
+    - changes:
+      - app/backend/**/*
+      - app/backend/Dockerfile
+
+  script:
+    - echo "Building backend..."
+    - docker build -f app/backend/Dockerfile -t "$DOCKERHUB_USER/backend:latest" .
+    - echo "Pushing the image to Docker Hub..."
+    - docker push "$DOCKERHUB_USER/backend:latest"
+
+
+build-frontend:
+  stage: build
+  extends: .docker-job
+
+  rules:
+    - changes:
+      - app/frontend/**/*
+
+  script:
+    - echo "Building frontend..."
+    - docker build -t "$DOCKERHUB_USER/frontend:latest" app/frontend/
+    - echo "Pushing the image to Docker Hub..."
+    - docker push "$DOCKERHUB_USER/frontend:latest"

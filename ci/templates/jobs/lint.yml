@@ -1,0 +1,29 @@
+lint-backend:python:
+  stage: lint
+  allow_failure: true
+  image: python:3.14.0-slim-trixie
+
+  rules:
+    - changes:
+        - app/backend/**/*
+
+  script:
+    - echo "Installing ruff..."
+    - python -m pip install ruff
+    - echo "Linting..."
+    - ruff check app/backend
+
+lint-frontend:node:
+  stage: lint
+  allow_failure: true
+  image: node:24-trixie-slim
+
+  rules:
+    - changes:
+        - app/frontend/**/*
+
+  script:
+    - cd app/frontend/
+    - echo "Linting..."
+    - npm ci
+    - npm run lint

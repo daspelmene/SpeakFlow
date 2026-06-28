@@ -1,0 +1,9 @@
+.docker-job:
+  image: docker:29.6.0
+  services:
+    - name: docker:dind
+  variables:
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - echo "Logging into Docker Registry..."
+    - echo "$DOCKERHUB_ACCESS_TOKEN" | docker login -u "$DOCKERHUB_USER" --password-stdin
