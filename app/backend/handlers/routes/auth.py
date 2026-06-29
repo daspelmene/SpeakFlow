@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from backend.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse
-from backend.storage.database import Database
-from backend.utils.hasher import Hasher
-from backend.utils.jwt import _get_user_id, create_access_token, create_refresh_token, decode_token
+from schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse
+from storage.database import Database
+from utils.hasher import Hasher
+from utils.jwt import _get_user_id, create_access_token, create_refresh_token, decode_token
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 

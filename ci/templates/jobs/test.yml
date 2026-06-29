@@ -3,14 +3,19 @@ test-backend:
   extends: .docker-job
 
   rules:
-    - when: never
+    - changes:
+      - app/backend/**/*
+      - app/backend/Dockerfile
+      - app/tests/**/*
 
   before_script:
-    - apk add --no-cache docker-cli-compose
-    - apk add --no-cache bash
+    - apk add --no-cache bash docker-cli-compose
+    - bash ci/scripts/generate_env_data.sh
 
   script:
-    - ./install.sh
-    - docker compose run --rm backend sh -c 'cd /app && PYTHONPATH=/app python -m pytest'
+    - docker compose -f ci/docker-compose.yml -p ci --env-file /env/.env up -d
+    - sleep 15 # Wait for migrations to run
+    - docker run --rm --network ci_default --env-file /env/.env "$DOCKERHUB_USER/speakflow-tests:latest"
+
   after_script:
-    - docker compose down -v
+    - docker compose -f ci/docker-compose.yml -p ci down -v

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-from backend.schemas.audio import (
+from schemas.audio import (
     AvailableRoom,
     AvailableRoomsResponse,
     CreateRoomResponse,
@@ -14,9 +14,9 @@ from backend.schemas.audio import (
     DisconnectRequest,
 )
 
-from backend.utils.audio import AudioService
-from backend.utils.jwt import get_current_user
-from backend.models.user import User
+from utils.audio import AudioService
+from utils.jwt import get_current_user
+from models.user import User
 
 router = APIRouter(prefix="/audio", tags=["Audio"])
 

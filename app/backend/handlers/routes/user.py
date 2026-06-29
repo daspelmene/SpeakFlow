@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Query, status
 
-from backend.schemas.user import UpdateUserRequest, UserMeResponse, UserResponse
-from backend.storage.database import Database
-from backend.utils.jwt import get_current_user
+from schemas.user import UpdateUserRequest, UserMeResponse, UserResponse
+from storage.database import Database
+from utils.jwt import get_current_user
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
