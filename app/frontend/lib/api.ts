@@ -38,7 +38,7 @@ export type UpdateProfilePayload = {
   bio?: string | null;
 };
 
-async function request<T>(
+export async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
@@ -66,7 +66,7 @@ async function request<T>(
   return response.json() as Promise<T>;
 }
 
-function getAuthHeaders() {
+export function getAuthHeaders() {
   const token = getAccessToken();
 
   if (!token) {

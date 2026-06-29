@@ -30,16 +30,18 @@ services:
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
       JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
     restart: unless-stopped
+    volumes:
+      - recordings:/recordings
 
   frontend:
     image: semyonnadutkin/speakflow-frontend:latest
     container_name: frontend
     depends_on:
       - backend
-    hostname:
-      frontend
+    hostname: frontend
     restart: unless-stopped
 
 volumes:
   postgres_data:
     name: postgres_data
+  recordings:  

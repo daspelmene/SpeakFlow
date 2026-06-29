@@ -1,0 +1,29 @@
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import desc
+
+from models.live_correction_note import LiveCorrectionNote
+
+
+class LiveCorrectionNoteRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create_note(self, data: dict) -> LiveCorrectionNote:
+        note = LiveCorrectionNote(**data)
+
+        self.session.add(note)
+
+        await self.session.commit()
+
+        return note
+
+    async def get_notes_by_user(self, target_user_id: int) -> list[LiveCorrectionNote]:
+        query = (
+            select(LiveCorrectionNote)
+            .where(LiveCorrectionNote.target_user_id == target_user_id)
+            .order_by(desc(LiveCorrectionNote.created_at))
+        )
+
+        result = await self.session.execute(query)
+        return list(result.scalars().all())

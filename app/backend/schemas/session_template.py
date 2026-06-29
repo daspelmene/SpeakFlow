@@ -12,6 +12,7 @@ class TopicCard(BaseModel):
     questions: list[str]
     vocabulary: list[VocabularyItem]
 
+
 class SessionTemplate(BaseModel):
     id: str
     title: str

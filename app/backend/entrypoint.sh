@@ -7,10 +7,8 @@ cd /app
 echo "Running database migrations..."
 python -m alembic upgrade head
 
-if [ "$#" -eq 0 ]; then
-    echo "Starting server..."
-    exec uvicorn main:app --host 0.0.0.0 --port 8000
-else
-    echo "Running custom command: $@"
-    exec "$@"
-fi
+echo "Starting server..."
+exec python -c "
+import uvicorn
+uvicorn.run('main:app', host='0.0.0.0', port=8000, ws_ping_interval=None, ws_ping_timeout=None)
+"

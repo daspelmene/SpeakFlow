@@ -11,6 +11,10 @@ import {
   mockOutgoingInvitations,
 } from "@/lib/mockData";
 import type { InvitationStatus, SessionInvitation } from "@/lib/types";
+import { getCurrentUser } from "@/lib/api";
+import { clearTokens, getAccessToken } from "@/lib/auth";
+import { isProfileComplete } from "@/lib/profile";
+import AudioRoom from "@/components/AudioRoom";
 
 type InvitationType = "incoming" | "outgoing";
 
@@ -443,34 +447,33 @@ export default function DashboardPage() {
                 </p>
               </div>
 
-              <div className="shrink-0 rounded-2xl bg-white p-4 shadow-sm">
-                <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                  Room status
-                </p>
-                <p className="mt-1 text-2xl font-black text-emerald-600">
-                  Ready
-                </p>
-                <Button className="mt-4 w-full" size="md">
-                  Join audio room
-                </Button>
+              <div className="shrink-0">
+                <AudioRoom />
               </div>
             </div>
           ) : (
-            <div>
-              <Badge variant="info">No active session</Badge>
+            <div className="flex flex-col gap-7 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <Badge variant="info">No active session</Badge>
 
-              <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-950">
-                Find a partner to start practicing
-              </h2>
+                <h2 className="mt-5 text-3xl font-black tracking-tight text-slate-950">
+                  Find a partner to start practicing
+                </h2>
 
-              <p className="mt-2 max-w-3xl text-lg leading-8 text-slate-600">
-                Send invitations to suitable partners. When someone accepts,
-                SpeakFlow will create one active guided audio session.
-              </p>
+                <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-600">
+                  Send invitations to several suitable partners. When someone
+                  accepts, SpeakFlow will create one active guided audio session.
+                  Or create an audio room directly to practice.
+                </p>
 
-              <Button className="mt-5" size="md">
-                Find partner
-              </Button>
+                <Button className="mt-6" size="lg">
+                  Find partner
+                </Button>
+              </div>
+
+              <div className="shrink-0">
+                <AudioRoom />
+              </div>
             </div>
           )}
         </Card>

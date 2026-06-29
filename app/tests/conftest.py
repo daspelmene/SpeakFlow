@@ -6,7 +6,6 @@ from httpx import AsyncClient
 from dotenv import load_dotenv
 from pathlib import Path
 
-# Загружаем .env из папки tests/ или корня
 env_path = Path(__file__).resolve().parent / ".env"
 if env_path.exists():
     load_dotenv(dotenv_path=env_path)
@@ -31,6 +30,7 @@ async def ensure_table_exists():
         return
     conn = await asyncpg.connect(DATABASE_URL)
     try:
+        # Check for a table added in a recent migration
         exists = await conn.fetchval(
             "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='users')"
         )
@@ -59,7 +59,6 @@ async def delete_all_users_async():
     finally:
         await conn.close()
 
-# Изменяем фикстуру на асинхронную
 @pytest.fixture(scope="function", autouse=True)
 async def clean_db():
     await delete_all_users_async()
@@ -81,21 +80,25 @@ async def client():
         yield client
 
 @pytest.fixture(scope="function")
-async def auth_client(client: AsyncClient):
-    email = "test@example.com"
-    password = "secret123"
-    fullname = "Test User"
-    access_token, _ = await register_user(client, email, password, fullname)
-    client.headers["Authorization"] = f"Bearer {access_token}"
-    client._test_user = {"email": email, "password": password, "fullname": fullname}
-    return client
+async def auth_client():
+    async with AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        email = "test@example.com"
+        password = "secret123"
+        fullname = "Test User"
+        access_token, _ = await register_user(client, email, password, fullname)
+        client.headers["Authorization"] = f"Bearer {access_token}"
+        client._test_user = {"email": email, "password": password, "fullname": fullname}
+        client.access_token = access_token
+        yield client
 
 @pytest.fixture(scope="function")
-async def second_user_client(client: AsyncClient):
-    email = "second@example.com"
-    password = "secret456"
-    fullname = "Second User"
-    token, _ = await register_user(client, email, password, fullname)
-    client.headers["Authorization"] = f"Bearer {token}"
-    client._test_user = {"email": email, "password": password, "fullname": fullname}
-    return client
+async def second_user_client():
+    async with AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        email = "second@example.com"
+        password = "secret456"
+        fullname = "Second User"
+        token, _ = await register_user(client, email, password, fullname)
+        client.headers["Authorization"] = f"Bearer {token}"
+        client._test_user = {"email": email, "password": password, "fullname": fullname}
+        client.access_token = token
+        yield client
