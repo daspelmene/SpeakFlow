@@ -14,13 +14,9 @@ services:
       interval: 2s
       timeout: 2s
       retries: 5
-    ports:
-      - 5432:5432
 
   backend:
-    build:
-      context: .
-      dockerfile: app/backend/Dockerfile
+    image: semyonnadutkin/speakflow-backend:latest
     container_name: backend
     depends_on:
       postgres:
@@ -34,23 +30,15 @@ services:
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
       JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
     restart: unless-stopped
-    ports:
-      - 8000:8000
 
   frontend:
-    build:
-      context: app/frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: http://backend:8000
+    image: semyonnadutkin/speakflow-frontend:latest
     container_name: frontend
     depends_on:
       - backend
     hostname:
       frontend
     restart: unless-stopped
-    ports:
-      - 3000:3000
 
 volumes:
   postgres_data:

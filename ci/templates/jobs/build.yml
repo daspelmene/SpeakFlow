@@ -9,9 +9,9 @@ build-backend:
 
   script:
     - echo "Building backend..."
-    - docker build -f app/backend/Dockerfile -t "$DOCKERHUB_USER/backend:latest" .
+    - docker build -f app/backend/Dockerfile -t "$DOCKERHUB_USER/speakflow-backend:latest" .
     - echo "Pushing the image to Docker Hub..."
-    - docker push "$DOCKERHUB_USER/backend:latest"
+    - docker push "$DOCKERHUB_USER/speakflow-backend:latest"
 
 
 build-frontend:
@@ -24,6 +24,21 @@ build-frontend:
 
   script:
     - echo "Building frontend..."
-    - docker build -t "$DOCKERHUB_USER/frontend:latest" app/frontend/
+    - docker build -t "$DOCKERHUB_USER/speakflow-frontend:latest" app/frontend/
     - echo "Pushing the image to Docker Hub..."
-    - docker push "$DOCKERHUB_USER/frontend:latest"
+    - docker push "$DOCKERHUB_USER/speakflow-frontend:latest"
+
+
+build-tests:
+  stage: build
+  extends: .docker-job
+
+  rules:
+    - changes:
+      - app/tests/**/*
+
+  script:
+    - echo "Building tests..."
+    - docker build -f app/tests/Dockerfile -t "$DOCKERHUB_USER/speakflow-tests:latest" .
+    - echo "Pushing the image to Docker Hub..."
+    - docker push "$DOCKERHUB_USER/speakflow-tests:latest"

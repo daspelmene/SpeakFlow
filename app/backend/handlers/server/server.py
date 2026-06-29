@@ -1,7 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.handlers.routes import v1_router
+from handlers.routes import v1_router
 
 
 class Server:

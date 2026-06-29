@@ -9,7 +9,8 @@ WORKDIR /app
 COPY app/backend/requirements.txt .
 RUN python -m pip install --no-cache-dir -r requirements.txt
 
-COPY app/ .
+COPY app/backend/ .
+# For documentation purposes
 COPY app/backend/entrypoint.sh .
 
 RUN mkdir -p /recordings && chown -R app:app /recordings

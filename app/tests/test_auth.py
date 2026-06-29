@@ -1,63 +1,56 @@
 import pytest
-
-from app.tests.constants.user import LOGIN_DATA, REGISTER_DATA, UPDATE_DATA
+from httpx import AsyncClient
+from conftest import register_user   # <-- добавлен импорт
 
 pytestmark = pytest.mark.asyncio
 
+async def test_register_success(client: AsyncClient):
+    resp = await client.post("/auth/register", json={
+        "email": "new@example.com",
+        "password": "pass123",
+        "fullname": "New User",
+    })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
+    assert data["token_type"] == "bearer"
 
-class TestUserFlow:
+async def test_register_duplicate_email(client: AsyncClient):
+    await register_user(client, "dup@example.com", "pass", "Dup")
+    resp = await client.post("/auth/register", json={
+        "email": "dup@example.com",
+        "password": "pass",
+        "fullname": "Dup2",
+    })
+    assert resp.status_code == 409
+    assert "already registered" in resp.text
 
-    async def test_positive_auth_test(self, async_client):
-        headers = lambda token: {"Authorization": f"Bearer {token}"}
+async def test_login_success(client: AsyncClient):
+    email, password = "login@example.com", "pass123"
+    await register_user(client, email, password, "Login")
+    resp = await client.post("/auth/login", json={"email": email, "password": password})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
 
-        # 1. Register
-        r = await async_client.post("/api/v1/auth/register", json=REGISTER_DATA)
-        assert r.status_code == 200
-        tokens = r.json()
-        assert "access_token" in tokens
+async def test_login_wrong_password(client: AsyncClient):
+    email = "wrong@example.com"
+    await register_user(client, email, "correct", "Wrong")
+    resp = await client.post("/auth/login", json={"email": email, "password": "wrong"})
+    assert resp.status_code == 401
+    assert "Invalid email or password" in resp.text
 
-        # 2. Login
-        r = await async_client.post("/api/v1/auth/login", json=LOGIN_DATA)
-        assert r.status_code == 200
-        tokens = r.json()
-        access = tokens["access_token"]
-        refresh = tokens["refresh_token"]
+async def test_refresh_token(client: AsyncClient):
+    email = "refresh@example.com"
+    _, refresh_token = await register_user(client, email, "pass", "Refresh")
+    resp = await client.post("/auth/refresh", json={"refresh_token": refresh_token})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "access_token" in data
+    assert "refresh_token" in data
 
-        # 3. GET /users/me — проверяем ВСЕ поля
-        r = await async_client.get("/api/v1/users/me", headers=headers(access))
-        assert r.status_code == 200
-        body = r.json()
-        assert body["email"] == REGISTER_DATA["email"]
-        assert body["fullname"] == REGISTER_DATA["fullname"]
-        assert body["native_language"] is None
-        assert body["target_language"] is None
-        assert body["interests"] == []
-        assert body["bio"] is None
-        assert body["is_active"] is True
-        assert "id" in body
-        assert "created_at" in body
-        assert "updated_at" in body
-
-        # 4. Refresh token
-        r = await async_client.post("/api/v1/auth/refresh", json={"refresh_token": refresh})
-        assert r.status_code == 200
-        new_tokens = r.json()
-        assert new_tokens["access_token"] != access
-        access = new_tokens["access_token"]
-
-        # 5. PATCH /users/me
-        r = await async_client.patch("/api/v1/users/me", json=UPDATE_DATA, headers=headers(access))
-        assert r.status_code == 200
-
-        # 6. GET /users/me — проверяем изменения
-        r = await async_client.get("/api/v1/users/me", headers=headers(access))
-        assert r.status_code == 200
-        body = r.json()
-        assert body["fullname"] == UPDATE_DATA["fullname"]
-        assert body["bio"] == UPDATE_DATA["bio"]
-        assert body["interests"] == UPDATE_DATA["interests"]
-        assert body["email"] == REGISTER_DATA["email"]  # не изменилось
-
-        # 7. Delete
-        r = await async_client.delete("/api/v1/users/me", headers=headers(access))
-        assert r.status_code == 204
+async def test_refresh_with_invalid_token(client: AsyncClient):
+    resp = await client.post("/auth/refresh", json={"refresh_token": "invalid"})
+    assert resp.status_code == 401

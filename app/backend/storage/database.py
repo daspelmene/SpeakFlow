@@ -2,8 +2,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy.ext.asyncio.session import AsyncSession
 
-from backend.config.config import settings
-from backend.storage.user_repo import UserRepository
+from config.config import settings
+from storage.user_repo import UserRepository
 
 
 class Database:

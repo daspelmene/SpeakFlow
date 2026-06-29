@@ -1,4 +1,5 @@
 deploy-infrastructure:k8s:
+  stage: deploy
   extends: .ssh-job
 
   rules:
@@ -20,6 +21,7 @@ deploy-infrastructure:k8s:
 
 
 deploy-backend:
+  stage: deploy
   extends: .ssh-job
 
   rules:
@@ -35,6 +37,7 @@ deploy-backend:
 
 
 deploy-frontend:
+  stage: deploy
   extends: .ssh-job
 
   rules:
