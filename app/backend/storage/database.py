@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio.session import AsyncSession
 
 from config.config import settings
 from storage.user_repo import UserRepository
+from storage.live_correction_note_repo import LiveCorrectionNoteRepository
+from storage.session_feedback_repo import SessionFeedbackRepository
 
 
 class Database:
@@ -14,11 +16,15 @@ class Database:
     def _ensure_engine(cls):
         if cls.engine is None:
             cls.engine = create_async_engine(settings.DATABASE_URL, echo=True)
-            cls.async_session_factory = async_sessionmaker(cls.engine, expire_on_commit=False)
+            cls.async_session_factory = async_sessionmaker(
+                cls.engine, expire_on_commit=False
+            )
 
     def __init__(self, session: AsyncSession):
         self.session = session
         self.users = UserRepository(session)
+        self.live_correction_notes = LiveCorrectionNoteRepository(session)
+        self.session_feedback = SessionFeedbackRepository(session)
 
     @classmethod
     async def get_db(cls):

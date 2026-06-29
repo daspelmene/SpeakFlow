@@ -1,17 +1,20 @@
 import pytest
+import websockets
 from httpx import AsyncClient
+import json
+from conftest import register_user
 
 pytestmark = pytest.mark.asyncio
 
-async def create_and_join(client: AsyncClient, user_name: str = "Tester"):
-    create_resp = await client.post("/audio/create-room")
-    room_id = create_resp.json()["roomId"]
-    join_resp = await client.post("/audio/join", json={
-        "roomId": room_id,
-        "userName": user_name,
-    })
-    join_data = join_resp.json()
-    return room_id, join_data["userSlot"]
+async def connect_to_room(auth_client: AsyncClient, room_id: str, user_name: str = "Tester"):
+    token = auth_client.access_token
+    ws_url = f"ws://backend:8000/api/v1/audio/ws/{room_id}?token={token}&user_name={user_name}"
+    websocket = await websockets.connect(ws_url)
+    msg = await websocket.recv()
+    data = json.loads(msg)
+    assert data["type"] == "room-state"
+    user_slot = data["userSlot"]
+    return websocket, user_slot
 
 async def test_create_room(auth_client: AsyncClient):
     resp = await auth_client.post("/audio/create-room")
@@ -21,106 +24,96 @@ async def test_create_room(auth_client: AsyncClient):
     assert len(data["roomId"]) == 8
 
 async def test_join_room(auth_client: AsyncClient):
-    room_id = (await auth_client.post("/audio/create-room")).json()["roomId"]
-    resp = await auth_client.post("/audio/join", json={
-        "roomId": room_id,
-        "userName": "Joiner",
-    })
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["status"] == "joined"
-    assert data["roomId"] == room_id
-    assert "userSlot" in data
-    # Бэкенд возвращает имя из токена, а не из запроса
-    assert data["userName"] == auth_client._test_user["fullname"]
+    create_resp = await auth_client.post("/audio/create-room")
+    room_id = create_resp.json()["roomId"]
+    ws, slot = await connect_to_room(auth_client, room_id)
+    assert slot in ("user1", "user2")
+    await ws.close()
 
-async def test_join_full_room(auth_client: AsyncClient, second_user_client: AsyncClient):
-    room_id = (await auth_client.post("/audio/create-room")).json()["roomId"]
-    await auth_client.post("/audio/join", json={"roomId": room_id, "userName": "User1"})
-    await second_user_client.post("/audio/join", json={"roomId": room_id, "userName": "User2"})
-    resp = await second_user_client.post("/audio/join", json={"roomId": room_id, "userName": "User3"})
-    assert resp.status_code == 400
-    assert "Room is full" in resp.text
+async def test_join_full_room(auth_client: AsyncClient, second_user_client: AsyncClient, client: AsyncClient):
+    create_resp = await auth_client.post("/audio/create-room")
+    room_id = create_resp.json()["roomId"]
+
+    ws1, slot1 = await connect_to_room(auth_client, room_id, "User1")
+    assert slot1 == "user1"
+
+    ws2, slot2 = await connect_to_room(second_user_client, room_id, "User2")
+    assert slot2 == "user2"
+
+    email3 = "third@example.com"
+    password3 = "pass789"
+    fullname3 = "Third User"
+    token3, _ = await register_user(client, email3, password3, fullname3)
+
+    ws_url = f"ws://backend:8000/api/v1/audio/ws/{room_id}?token={token3}&user_name=User3"
+    ws3 = await websockets.connect(ws_url)
+    msg = await ws3.recv()
+    error_data = json.loads(msg)
+    assert error_data["type"] == "error"
+    assert "Room is full" in error_data["message"]
+    await ws3.close()
+    assert ws3.close_code == 4004
+
+    await ws1.close()
+    await ws2.close()
 
 async def test_join_nonexistent_room(auth_client: AsyncClient):
-    resp = await auth_client.post("/audio/join", json={
-        "roomId": "nonexistent",
-        "userName": "Ghost",
-    })
-    assert resp.status_code == 404
-    assert "Room not found" in resp.text
+    room_id = "nonexistent"
+    token = auth_client.access_token
+    ws_url = f"ws://backend:8000/api/v1/audio/ws/{room_id}?token={token}&user_name=Ghost"
+    ws = await websockets.connect(ws_url)
+    msg = await ws.recv()
+    error_data = json.loads(msg)
+    assert error_data["type"] == "error"
+    assert "Room not found" in error_data["message"]
+    await ws.close()
+    assert ws.close_code == 4004
 
 async def test_available_rooms(auth_client: AsyncClient):
-    room_id, _ = await create_and_join(auth_client)
+    create_resp = await auth_client.post("/audio/create-room")
+    room_id = create_resp.json()["roomId"]
+
     resp = await auth_client.get("/audio/available-rooms")
     assert resp.status_code == 200
-    data = resp.json()
-    rooms = data["rooms"]
-    assert any(r["roomId"] == room_id for r in rooms)
-
-async def test_disconnect(auth_client: AsyncClient):
-    room_id, _ = await create_and_join(auth_client)
-    resp = await auth_client.post("/audio/disconnect", json={"roomId": room_id})
-    assert resp.status_code == 200
-    assert resp.json()["status"] == "disconnected"
-    avail = await auth_client.get("/audio/available-rooms")
-    rooms = avail.json()["rooms"]
+    rooms = resp.json()["rooms"]
     assert all(r["roomId"] != room_id for r in rooms)
 
-async def test_should_renegotiate(auth_client: AsyncClient):
-    room_id, user_slot = await create_and_join(auth_client)
-    resp = await auth_client.get(f"/audio/should-renegotiate?roomId={room_id}&userSlot={user_slot}")
+    ws, _ = await connect_to_room(auth_client, room_id)
+
+    resp = await auth_client.get("/audio/available-rooms")
     assert resp.status_code == 200
-    data = resp.json()
-    assert data["renegotiate"] is False
+    rooms = resp.json()["rooms"]
+    assert any(r["roomId"] == room_id for r in rooms)
 
-async def test_offer_sdp(auth_client: AsyncClient):
-    room_id, user_slot = await create_and_join(auth_client)
-    dummy_sdp = "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n"
-    resp = await auth_client.post("/audio/offer", json={
-        "roomId": room_id,
-        "userSlot": user_slot,
-        "sdp": dummy_sdp,
-        "type": "offer",
-    })
+    disconnect_resp = await auth_client.post("/audio/disconnect", json={"roomId": room_id})
+    assert disconnect_resp.status_code == 200
+    assert disconnect_resp.json()["status"] == "disconnected"
+
+    resp = await auth_client.get("/audio/available-rooms")
     assert resp.status_code == 200
-    data = resp.json()
-    assert "sdp" in data
-    assert data["type"] == "answer"
+    rooms = resp.json()["rooms"]
+    assert all(r["roomId"] != room_id for r in rooms)
 
-async def test_offer_unknown_room(auth_client: AsyncClient):
-    dummy_sdp = "v=0\r\no=- 0 0\r\n"
-    resp = await auth_client.post("/audio/offer", json={
-        "roomId": "unknown",
-        "userSlot": "user1",
-        "sdp": dummy_sdp,
-        "type": "offer",
-    })
-    assert resp.status_code == 404
-    assert "Room not found" in resp.text
+    await ws.close()
 
-async def test_ice_candidate(auth_client: AsyncClient):
-    room_id, user_slot = await create_and_join(auth_client)
-    candidate_payload = {
-        "roomId": room_id,
-        "userSlot": user_slot,
-        "candidate": {
-            "candidate": "candidate:1 1 UDP 2122252543 192.168.1.1 5000 typ host",
-            "sdpMid": "0",
-            "sdpMLineIndex": 0,
-        }
-    }
-    resp = await auth_client.post("/audio/ice-candidate", json=candidate_payload)
+async def test_disconnect(auth_client: AsyncClient):
+    create_resp = await auth_client.post("/audio/create-room")
+    room_id = create_resp.json()["roomId"]
+
+    ws, _ = await connect_to_room(auth_client, room_id)
+
+    resp = await auth_client.get("/audio/available-rooms")
     assert resp.status_code == 200
-    assert resp.json()["status"] == "ok"
+    rooms = resp.json()["rooms"]
+    assert any(r["roomId"] == room_id for r in rooms)
 
-async def test_ice_candidate_missing_fields(auth_client: AsyncClient):
-    room_id, user_slot = await create_and_join(auth_client)
-    # Отсутствует обязательное поле candidate -> валидация Pydantic вернёт 422
-    resp = await auth_client.post("/audio/ice-candidate", json={
-        "roomId": room_id,
-        "userSlot": user_slot,
-        "candidate": {"sdpMid": "0"}   # нет поля "candidate"
-    })
-    # Теперь ожидаем 422, так как валидация не пройдена
-    assert resp.status_code == 422
+    disconnect_resp = await auth_client.post("/audio/disconnect", json={"roomId": room_id})
+    assert disconnect_resp.status_code == 200
+    assert disconnect_resp.json()["status"] == "disconnected"
+
+    resp = await auth_client.get("/audio/available-rooms")
+    assert resp.status_code == 200
+    rooms = resp.json()["rooms"]
+    assert all(r["roomId"] != room_id for r in rooms)
+
+    await ws.close()

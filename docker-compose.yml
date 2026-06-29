@@ -34,6 +34,8 @@ services:
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES}
       JWT_REFRESH_TOKEN_EXPIRE_DAYS: ${JWT_REFRESH_TOKEN_EXPIRE_DAYS}
     restart: unless-stopped
+    volumes:
+      - recordings:/recordings
     ports:
       - 8000:8000
 
@@ -43,6 +45,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: http://backend:8000
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
     container_name: frontend
     depends_on:
       - backend
@@ -55,3 +58,4 @@ services:
 volumes:
   postgres_data:
     name: postgres_data
+  recordings:

@@ -9,9 +9,9 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 @router.get("/match", response_model=list[UserResponse])
 async def match_users(
-        limit: int = Query(10, ge=1, le=100),
-        current_user=Depends(get_current_user),
-        db: Database = Depends(Database.get_db),
+    limit: int = Query(10, ge=1, le=100),
+    current_user=Depends(get_current_user),
+    db: Database = Depends(Database.get_db),
 ):
     matched = await db.users.get_matched_users(current_user)
     return matched[:limit]
