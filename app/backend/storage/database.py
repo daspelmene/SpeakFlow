@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio.session import AsyncSession
 
 from config.config import settings
 from storage.user_repo import UserRepository
+from storage.room_repo import RoomRepository
 from storage.live_correction_note_repo import LiveCorrectionNoteRepository
 from storage.session_feedback_repo import SessionFeedbackRepository
 
@@ -23,6 +24,7 @@ class Database:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.users = UserRepository(session)
+        self.rooms = RoomRepository(session)
         self.live_correction_notes = LiveCorrectionNoteRepository(session)
         self.session_feedback = SessionFeedbackRepository(session)
 
@@ -31,3 +33,4 @@ class Database:
         cls._ensure_engine()
         async with cls.async_session_factory() as session:
             yield cls(session)
+            

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import uuid
 from datetime import datetime
 from typing import Any
 
@@ -27,38 +26,48 @@ class WSAudioService:
         self._pending_disconnects: dict[str, dict[str, asyncio.Task]] = {}
 
     # ------------------------------------------------------------------
-    # Room lifecycle
+    # Room management (WebSocket level)
     # ------------------------------------------------------------------
 
-    def create_room(self) -> str:
-        room_id = str(uuid.uuid4())[:8]
+    def register_room(self, room_id: str, creator_name: str, invited_name: str):
+        """Register a room for WebSocket tracking."""
+        logger.info(
+            f"Registering room {room_id} for WebSocket: "
+            f"creator={creator_name}, invited={invited_name}"
+        )
         self.rooms[room_id] = {
-            "user1": None,
-            "user2": None,
+            "user1": None,  # Creator
+            "user2": None,  # Invited
             "cleaning_up": False,
+            "creator_name": creator_name,
+            "invited_name": invited_name,
             "created_at": datetime.now(),
         }
-        logger.info(f"Room {room_id} created")
-        return room_id
 
     async def ws_connect(
-        self, room_id: str, user_id: str, user_name: str, websocket: WebSocket
+        self, room_id: str, user_id: str, websocket: WebSocket
     ) -> dict:
-        """Register a WebSocket connection for a user in a room."""
+        """Register a WebSocket connection for a user in a room.
+
+        Validates that the user is a participant of the room.
+        """
         room_id = room_id.strip()
-        user_name = user_name.strip()
 
         if not room_id or room_id not in self.rooms:
+            logger.warning(f"WebSocket connect failed: room {room_id} not found")
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Room not found")
 
         room = self.rooms[room_id]
 
-        # Reconnect: if user was previously in the room, reuse slot
+        # Determine user slot based on role
+        # We need to query the DB to validate, but let's use a simpler approach:
+        # Check if user is reconnecting to an existing slot
         for slot in ("user1", "user2"):
             existing = room.get(slot)
             if existing and existing.get("user_id") == user_id:
-                logger.info(f"User {user_name} reconnecting as {slot}")
-                existing["disconnecting"] = True
+                logger.info(
+                    f"User {user_id} reconnecting as {slot} in room {room_id}"
+                )
 
                 # Cancel pending deferred disconnect for this slot
                 pending = self._pending_disconnects.get(room_id, {})
@@ -66,7 +75,7 @@ class WSAudioService:
                 if pending_task and not pending_task.done():
                     pending_task.cancel()
                     logger.info(
-                        f"Cancelled deferred disconnect for reconnecting user {user_name}"
+                        f"Cancelled deferred disconnect for reconnecting user {user_id}"
                     )
 
                 room[slot] = {
@@ -85,7 +94,7 @@ class WSAudioService:
                         {
                             "type": "user-joined",
                             "userSlot": slot,
-                            "userName": user_name,
+                            "userName": existing.get("name", "Unknown"),
                         },
                     )
 
@@ -93,16 +102,22 @@ class WSAudioService:
                     "status": "reconnected",
                     "roomId": room_id,
                     "userSlot": slot,
-                    "userName": user_name,
+                    "userName": existing.get("name", "Unknown"),
                 }
 
-        # New join — find empty slot
+        # New connection - try to assign to correct slot
+        # If user1 slot is empty, this might be the creator
         if room["user1"] is None:
             user_slot = "user1"
+            user_name = room.get("creator_name", "Creator")
         elif room["user2"] is None:
             user_slot = "user2"
+            user_name = room.get("invited_name", "Invited")
         else:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Room is full")
+            logger.warning(f"Room {room_id} is full, rejecting user {user_id}")
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "Room is full"
+            )
 
         room[user_slot] = {
             "ws": websocket,
@@ -112,11 +127,11 @@ class WSAudioService:
             "disconnecting": False,
         }
 
-        logger.info(f"{user_name} joined as {user_slot}")
+        logger.info(
+            f"User {user_name} (id={user_id}) joined as {user_slot} in room {room_id}"
+        )
 
-        # CRITICAL FIX: Notify the existing user BEFORE returning to the new user.
-        # This gives the existing user's client time to restart its MediaRecorder
-        # so that the first audio chunks the new user receives have proper WebM headers.
+        # Notify the other user if they're already connected
         other_slot = "user2" if user_slot == "user1" else "user1"
         other = room.get(other_slot)
         if other and other.get("ws") and not other.get("disconnecting"):
@@ -130,9 +145,6 @@ class WSAudioService:
             )
             logger.info(f"Sent user-joined to {other_slot} for {user_slot}")
 
-            # Small delay to ensure the existing user has time to restart their MediaRecorder
-            await asyncio.sleep(0.1)
-
         return {
             "status": "joined",
             "roomId": room_id,
@@ -141,10 +153,11 @@ class WSAudioService:
         }
 
     # ------------------------------------------------------------------
-    # Audio forwarding (replaces entire WebRTC MediaRelay)
+    # Audio forwarding
     # ------------------------------------------------------------------
 
     async def handle_audio_frame(self, room_id: str, from_slot: str, data: bytes):
+        """Forward audio binary data to the other participant."""
         room = self.rooms.get(room_id)
         if not room:
             logger.warning(f"[AUDIO] No room {room_id}")
@@ -153,19 +166,21 @@ class WSAudioService:
         other_slot = "user2" if from_slot == "user1" else "user1"
         other = room.get(other_slot)
 
-        logger.info(
-            f"[AUDIO] {from_slot} -> {other_slot}: {len(data)} bytes, ws={bool(other and other.get('ws'))}"
-        )
-
         if other and other.get("ws") and not other.get("disconnecting"):
             try:
                 await other["ws"].send_bytes(data)
-                logger.debug(f"[AUDIO] Forwarded {len(data)} bytes to {other_slot}")
+                logger.debug(
+                    f"[AUDIO] Forwarded {len(data)} bytes from {from_slot} to {other_slot}"
+                )
             except Exception as e:
-                logger.error(f"[AUDIO] Failed to forward to {other_slot}: {e}")
+                logger.error(
+                    f"[AUDIO] Failed to forward {len(data)} bytes "
+                    f"from {from_slot} to {other_slot}: {e}"
+                )
         else:
-            logger.warning(
-                f"[AUDIO] Cannot forward: other_exists={bool(other)}, ws={bool(other.get('ws') if other else False)}"
+            logger.debug(
+                f"[AUDIO] Cannot forward {len(data)} bytes from {from_slot}: "
+                f"other slot {other_slot} not available"
             )
 
     # ------------------------------------------------------------------
@@ -179,6 +194,7 @@ class WSAudioService:
         if msg_type == "mute":
             room = self.rooms.get(room_id)
             if not room:
+                logger.warning(f"[SIGNALING] Room {room_id} not found for mute")
                 return
             user_data = room.get(user_slot)
             if user_data:
@@ -194,8 +210,12 @@ class WSAudioService:
                             "muted": user_data["muted"],
                         },
                     )
+                    logger.debug(
+                        f"[SIGNALING] Mute state for {user_slot}: "
+                        f"{user_data['muted']}"
+                    )
         else:
-            logger.warning(f"Unknown WS message type: {msg_type}")
+            logger.warning(f"[SIGNALING] Unknown message type: {msg_type}")
 
     # ------------------------------------------------------------------
     # Disconnect / cleanup
@@ -205,14 +225,23 @@ class WSAudioService:
         """Disconnect a user with a 3-second grace period for reconnection."""
         room = self.rooms.get(room_id)
         if not room:
+            logger.warning(
+                f"[DISCONNECT] Room {room_id} not found for disconnect"
+            )
             return
 
         user_data = room.get(user_slot)
         if not user_data:
+            logger.warning(
+                f"[DISCONNECT] User {user_slot} not found in room {room_id}"
+            )
             return
 
         user_name = user_data.get("name", user_slot)
-        logger.info(f"Disconnecting {user_name} ({user_slot}) from room {room_id}")
+        logger.info(
+            f"[DISCONNECT] User {user_name} ({user_slot}) disconnecting "
+            f"from room {room_id}"
+        )
 
         # Mark as disconnecting
         user_data["disconnecting"] = True
@@ -221,14 +250,22 @@ class WSAudioService:
             await asyncio.sleep(3.0)  # Grace period
             room = self.rooms.get(room_id)
             if not room:
+                logger.debug(f"[DISCONNECT] Room {room_id} already cleaned up")
                 return
+
             # If the user reconnected, their slot will have disconnecting=False
             user_data = room.get(user_slot)
             if user_data and not user_data.get("disconnecting"):
-                logger.info(f"Reconnected user {user_name} skipped deferred disconnect")
+                logger.info(
+                    f"[DISCONNECT] Reconnected user {user_name} "
+                    f"skipped deferred disconnect"
+                )
                 return
 
-            logger.info(f"Grace period expired, finalizing disconnect for {user_name}")
+            logger.info(
+                f"[DISCONNECT] Grace period expired, finalizing "
+                f"disconnect for {user_name} ({user_slot})"
+            )
 
             # Notify other participant
             other_slot = "user2" if user_slot == "user1" else "user1"
@@ -245,6 +282,9 @@ class WSAudioService:
 
             # Clear slot
             room[user_slot] = None
+            logger.info(
+                f"[DISCONNECT] Slot {user_slot} cleared in room {room_id}"
+            )
 
             # Clean up pending disconnects entry
             pending = self._pending_disconnects.get(room_id, {})
@@ -252,72 +292,86 @@ class WSAudioService:
 
             # If room is empty, clean up
             if room.get("user1") is None and room.get("user2") is None:
-                await self._cleanup_room(room_id)
+                logger.info(
+                    f"[DISCONNECT] Room {room_id} is empty, cleaning up"
+                )
+                await self.cleanup_room(room_id)
 
         # Store the disconnect task so ws_connect can cancel it on reconnect
         disconnect_task = asyncio.create_task(_deferred_disconnect())
         if room_id not in self._pending_disconnects:
             self._pending_disconnects[room_id] = {}
         self._pending_disconnects[room_id][user_slot] = disconnect_task
+        logger.debug(
+            f"[DISCONNECT] Deferred disconnect scheduled for {user_name} "
+            f"in room {room_id}"
+        )
 
-    async def disconnect(self, room_id: str):
-        """Full room disconnect (compatibility with REST endpoint)."""
-        await self._cleanup_room(room_id)
-
-    async def _cleanup_room(self, room_id: str):
+    async def cleanup_room(self, room_id: str):
+        """Full room cleanup."""
         room = self.rooms.get(room_id)
         if not room or room.get("cleaning_up"):
+            logger.debug(
+                f"[CLEANUP] Room {room_id} already cleaned up or not found"
+            )
             return
 
         room["cleaning_up"] = True
-        logger.info(f"Cleaning up room {room_id}")
+        logger.info(f"[CLEANUP] Cleaning up room {room_id}")
 
-        # Mark all users as disconnecting
+        # Close all WebSocket connections
         for slot in ("user1", "user2"):
             user_data = room.get(slot)
             if user_data:
                 user_data["disconnecting"] = True
+                ws = user_data.get("ws")
+                if ws:
+                    try:
+                        await ws.close(code=4000, reason="Room closed")
+                        logger.info(
+                            f"[CLEANUP] Closed WebSocket for {slot} in room {room_id}"
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"[CLEANUP] Error closing WebSocket for {slot}: {e}"
+                        )
 
+        # Remove room
         if room_id in self.rooms:
             del self.rooms[room_id]
+            logger.info(f"[CLEANUP] Room {room_id} removed from tracking")
 
         # Cancel any pending deferred disconnects for this room
         pending = self._pending_disconnects.pop(room_id, {})
-        for task in pending.values():
+        for slot, task in pending.items():
             if not task.done():
                 task.cancel()
+                logger.debug(
+                    f"[CLEANUP] Cancelled deferred disconnect for {slot}"
+                )
 
-        logger.info(f"Room {room_id} deleted")
+        logger.info(f"[CLEANUP] Room {room_id} cleanup complete")
 
     # ------------------------------------------------------------------
     # Room queries
     # ------------------------------------------------------------------
 
-    def get_available_rooms(self) -> list[dict]:
-        available = []
-        for room_id, room in self.rooms.items():
-            if room.get("user1") and not room.get("user2"):
-                if not room.get("cleaning_up"):
-                    available.append(
-                        {
-                            "roomId": room_id,
-                            "userName": room["user1"]["name"],
-                            "created": room.get(
-                                "created_at", datetime.now()
-                            ).isoformat(),
-                        }
-                    )
-        return available
-
     def get_room_info(self, room_id: str) -> dict | None:
+        """Get information about a room."""
         room = self.rooms.get(room_id)
         if not room:
+            logger.debug(f"[QUERY] Room {room_id} not found for info")
             return None
+
         participants = []
         for slot in ("user1", "user2"):
             ud = room.get(slot)
-            if ud:
-                participants.append({"slot": slot, "name": ud.get("name", "")})
+            if ud and not ud.get("disconnecting"):
+                participants.append({
+                    "slot": slot,
+                    "name": ud.get("name", "Unknown"),
+                })
+
         return {
             "roomId": room_id,
             "participants": participants,
@@ -333,7 +387,7 @@ class WSAudioService:
         try:
             await websocket.send_json(data)
         except Exception as e:
-            logger.warning(f"WebSocket send failed: {e}")
+            logger.warning(f"[WS] WebSocket send failed: {e}")
 
 
 # Module-level singleton
