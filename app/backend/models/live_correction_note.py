@@ -14,8 +14,8 @@ class LiveCorrectionNote(Base):
 
     room_id: Mapped[str] = mapped_column(index=True)
 
-    author_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
-    target_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    author_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    target_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
     note_text: Mapped[str]
 
