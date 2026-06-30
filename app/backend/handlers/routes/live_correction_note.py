@@ -24,16 +24,13 @@ async def create_note(
     db: Database = Depends(Database.get_db),
     user: User = Depends(get_current_user),
 ):
-    print("ROOM_ID INPUT:", data.room_id)
-    print("ROOMS KEYS:", list(audio_service.rooms.keys()))
-    print("AVAILABLE:", audio_service.rooms)
     if data.room_id not in audio_service.rooms:
         raise HTTPException(status_code=404, detail="Room not found")
-
+    
     target = await db.users.get_user_by_id(data.target_user_id)
     if not target:
         raise HTTPException(404, "Target user not found")
-
+    
     return await db.live_correction_notes.create_note(
         {
             "room_id": data.room_id,
