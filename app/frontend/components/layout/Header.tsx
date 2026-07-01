@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSyncExternalStore } from "react";
-
+import { removeActiveRoomId } from "@/lib/activeRoomStorage";
 import Button from "@/components/ui/Button";
 import { clearTokens, getAccessToken } from "@/lib/auth";
 
@@ -37,6 +37,7 @@ export default function Header() {
 
   function handleLogOut() {
     clearTokens();
+    removeActiveRoomId();
     router.push("/login");
   }
 
