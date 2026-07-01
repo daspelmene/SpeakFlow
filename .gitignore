@@ -5,6 +5,7 @@
 # Env
 .env
 .venv
+app/frontend/.env.local
 
 # Cache
 __pycache__/
