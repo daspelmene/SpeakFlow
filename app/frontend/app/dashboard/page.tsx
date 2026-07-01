@@ -1,553 +1,579 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import PageContainer from "@/components/layout/PageContainer";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import {
-  mockIncomingInvitations,
-  mockOutgoingInvitations,
-} from "@/lib/mockData";
-import type { InvitationStatus, SessionInvitation } from "@/lib/types";
-import { getCurrentUser } from "@/lib/api";
-import { clearTokens, getAccessToken } from "@/lib/auth";
-import { isProfileComplete } from "@/lib/profile";
-import AudioRoom from "@/components/AudioRoom";
+  declineInvitation,
+  findMatch,
+  getPendingInvitations,
+  joinRoom,
+  type RoomInvitation,
+} from "@/lib/roomApi";
+import { getAccessToken } from "@/lib/auth";
+import {
+  getActiveRoomId,
+  removeActiveRoomId,
+  saveActiveRoomId,
+} from "@/lib/activeRoomStorage";
+import { saveSessionPartnerUserId } from "@/lib/sessionPartnerStorage";
+import {
+  getLiveCorrectionNotes,
+  getSessionFeedback,
+  type LiveCorrectionNote,
+  type SessionFeedback,
+} from "@/lib/sessionActivityApi";
 
-type InvitationType = "incoming" | "outgoing";
-
-const statusBadgeVariants: Record<
-  InvitationStatus,
-  "success" | "info" | "warning"
-> = {
-  pending: "info",
-  accepted: "success",
-  declined: "warning",
-  expired_sender_busy: "warning",
-  expired_receiver_busy: "warning",
-  expired_timeout: "warning",
-};
-
-const statusPriority: Record<InvitationStatus, number> = {
-  accepted: 1,
-  pending: 2,
-  declined: 3,
-  expired_sender_busy: 4,
-  expired_receiver_busy: 4,
-  expired_timeout: 4,
-};
-
-function getStatusLabel(status: InvitationStatus, type: InvitationType) {
-  if (status === "pending") {
-    return type === "incoming" ? "Needs response" : "Waiting";
-  }
-
-  if (status === "accepted") {
-    return "Ready";
-  }
-
-  if (status === "declined") {
-    return "Declined";
-  }
-
-  if (status === "expired_timeout") {
-    return "Expired";
-  }
-
-  if (status === "expired_sender_busy") {
-    return type === "outgoing" ? "You are matched" : "Partner unavailable";
-  }
-
-  if (status === "expired_receiver_busy") {
-    return type === "outgoing" ? "Partner unavailable" : "You are matched";
-  }
-
-  return "Unknown";
+function formatShortRoomId(roomId: string) {
+  return roomId.length > 12 ? `${roomId.slice(0, 8)}...` : roomId;
 }
 
-function getFirstAcceptedInvitation(invitations: SessionInvitation[]) {
-  return [...invitations]
-    .filter((invitation) => invitation.status === "accepted")
-    .sort((a, b) => {
-      const aTime = a.acceptedAt ? new Date(a.acceptedAt).getTime() : 0;
-      const bTime = b.acceptedAt ? new Date(b.acceptedAt).getTime() : 0;
-
-      return aTime - bTime;
-    })[0];
-}
-
-function getActiveSessionInvitation(
-  outgoingInvitations: SessionInvitation[],
-  incomingInvitations: SessionInvitation[],
-) {
-  const firstAcceptedOutgoing = getFirstAcceptedInvitation(outgoingInvitations);
-
-  if (firstAcceptedOutgoing) {
-    return firstAcceptedOutgoing;
-  }
-
-  const firstAcceptedIncoming = getFirstAcceptedInvitation(incomingInvitations);
-
-  if (firstAcceptedIncoming) {
-    return firstAcceptedIncoming;
-  }
-
-  return undefined;
-}
-
-function getEffectiveInvitationStatus(
-  invitation: SessionInvitation,
-  type: InvitationType,
-  activeSessionInvitation?: SessionInvitation,
-): InvitationStatus {
-  if (!activeSessionInvitation) {
-    return invitation.status;
-  }
-
-  if (invitation.id === activeSessionInvitation.id) {
-    return "accepted";
-  }
-
-  if (invitation.status === "pending" || invitation.status === "accepted") {
-    return type === "outgoing"
-      ? "expired_sender_busy"
-      : "expired_receiver_busy";
-  }
-
-  return invitation.status;
-}
-
-function sortInvitations(
-  invitations: SessionInvitation[],
-  type: InvitationType,
-  activeSessionInvitation?: SessionInvitation,
-) {
-  return [...invitations].sort((a, b) => {
-    const aStatus = getEffectiveInvitationStatus(
-      a,
-      type,
-      activeSessionInvitation,
-    );
-    const bStatus = getEffectiveInvitationStatus(
-      b,
-      type,
-      activeSessionInvitation,
-    );
-
-    return statusPriority[aStatus] - statusPriority[bStatus];
-  });
-}
-
-function PartnerProfilePreview({
-  invitation,
-  onClose,
-}: {
-  invitation: SessionInvitation;
-  onClose: () => void;
-}) {
-  const partnerInterests =
-    invitation.partnerInterests && invitation.partnerInterests.length > 0
-      ? invitation.partnerInterests
-      : ["No interests provided"];
-
-  const partnerBio =
-    invitation.partnerBio ||
-    "This partner has not added a bio yet, but you can still start a guided speaking session.";
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-      <div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-xl">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <Badge variant="info">Partner profile</Badge>
-
-            <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-950">
-              {invitation.partnerName}
-            </h2>
-
-            <p className="mt-2 text-base leading-7 text-slate-600">
-              Review this learner&apos;s languages, interests, and bio before
-              deciding whether to practice together.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-full bg-slate-100 px-3 py-1.5 text-sm font-black text-slate-600 transition-colors hover:bg-slate-200"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-black uppercase tracking-wide text-slate-400">
-              Native language
-            </p>
-            <p className="mt-1 text-xl font-black text-slate-950">
-              {invitation.partnerNativeLanguage}
-            </p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-black uppercase tracking-wide text-slate-400">
-              Target language
-            </p>
-            <p className="mt-1 text-xl font-black text-indigo-700">
-              {invitation.partnerTargetLanguage}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-3 rounded-2xl border border-indigo-100 bg-indigo-50 p-4">
-          <p className="text-xs font-black uppercase tracking-wide text-indigo-500">
-            Suggested session
-          </p>
-          <p className="mt-1 text-lg font-black text-slate-950">
-            {invitation.templateTitle}
-          </p>
-        </div>
-
-        <div className="mt-3 rounded-2xl border border-slate-200 bg-white p-4">
-          <p className="text-xs font-black uppercase tracking-wide text-slate-400">
-            Interests
-          </p>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {partnerInterests.map((interest) => (
-              <span
-                key={interest}
-                className="rounded-full bg-indigo-50 px-3 py-1.5 text-sm font-bold text-indigo-700 ring-1 ring-indigo-100"
-              >
-                {interest}
-              </span>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs font-black uppercase tracking-wide text-slate-400">
-            Bio
-          </p>
-
-          <p className="mt-2 text-base leading-7 text-slate-600">
-            {partnerBio}
-          </p>
-        </div>
-
-        <Button className="mt-6 w-full" variant="secondary" onClick={onClose}>
-          Close profile
-        </Button>
-      </div>
-    </div>
-  );
+function isActiveRoomConflict(message: string) {
+  return message.toLowerCase().includes("active room");
 }
 
 function InvitationCard({
   invitation,
-  type,
-  activeSessionInvitation,
-  onViewProfile,
-  onRemove,
+  isJoining,
+  isDeclining,
+  onJoin,
+  onDecline,
 }: {
-  invitation: SessionInvitation;
-  type: InvitationType;
-  activeSessionInvitation?: SessionInvitation;
-  onViewProfile: (invitation: SessionInvitation) => void;
-  onRemove: (invitationId: string) => void;
+  invitation: RoomInvitation;
+  isJoining: boolean;
+  isDeclining: boolean;
+  onJoin: (invitation: RoomInvitation) => void;
+  onDecline: (invitation: RoomInvitation) => void;
 }) {
-  const effectiveStatus = getEffectiveInvitationStatus(
-    invitation,
-    type,
-    activeSessionInvitation,
-  );
-
-  const isPending = effectiveStatus === "pending";
-  const isAccepted = effectiveStatus === "accepted";
-  const isActiveSession = activeSessionInvitation?.id === invitation.id;
-
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+    <div className="rounded-3xl border border-amber-100 bg-amber-50 p-5 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <p className="text-lg font-extrabold text-slate-950">
-            {type === "incoming"
-              ? `${invitation.partnerName} invited you`
-              : `You invited ${invitation.partnerName}`}
+          <Badge variant="warning">Incoming invitation</Badge>
+
+          <h3 className="mt-4 text-2xl font-black tracking-tight text-slate-950">
+            {invitation.creator_user_name} invited you
+          </h3>
+
+          <p className="mt-2 text-base leading-7 text-slate-600">
+            Join this room to start an audio-only guided speaking session.
           </p>
 
-          <p className="mt-1 text-base font-semibold text-slate-700">
-            {invitation.templateTitle}
-          </p>
+          <div className="mt-4 rounded-2xl bg-white px-4 py-3 ring-1 ring-amber-100">
+            <p className="text-xs font-black uppercase tracking-wide text-slate-400">
+              Room ID
+            </p>
 
-          <p className="mt-1 text-base leading-7 text-slate-500">
-            Native {invitation.partnerNativeLanguage} speaker learning{" "}
-            {invitation.partnerTargetLanguage}
-          </p>
+            <p className="mt-1 break-all text-base font-black text-slate-900">
+              {formatShortRoomId(invitation.room_id)}
+            </p>
+          </div>
         </div>
 
-        <Badge variant={statusBadgeVariants[effectiveStatus]}>
-          {getStatusLabel(effectiveStatus, type)}
-        </Badge>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-3">
-        <Button
-          type="button"
-          size="sm"
-          variant="secondary"
-          onClick={() => onViewProfile(invitation)}
-        >
-          View profile
-        </Button>
-
-        {type === "incoming" && isPending && (
-          <>
-            <Button type="button" size="sm">
-              Accept
-            </Button>
-
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() => onRemove(invitation.id)}
-            >
-              Decline
-            </Button>
-          </>
-        )}
-
-        {type === "outgoing" && isPending && (
+        <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
           <Button
             type="button"
-            size="sm"
-            variant="secondary"
-            onClick={() => onRemove(invitation.id)}
+            onClick={() => onJoin(invitation)}
+            disabled={isJoining || isDeclining}
           >
-            Cancel invite
+            {isJoining ? "Joining..." : "Join room"}
           </Button>
-        )}
 
-        {isAccepted && (
-          <Button type="button" size="sm" variant="secondary" disabled>
-            {isActiveSession ? "Active session" : "Closed"}
-          </Button>
-        )}
-
-        {!isPending && !isAccepted && (
           <Button
             type="button"
-            size="sm"
             variant="secondary"
-            onClick={() => onRemove(invitation.id)}
+            onClick={() => onDecline(invitation)}
+            disabled={isJoining || isDeclining}
           >
-            Remove
+            {isDeclining ? "Declining..." : "Decline"}
           </Button>
-        )}
+        </div>
       </div>
     </div>
   );
 }
 
+function PreviousSessionsPreview({
+  notes,
+  feedbackItems,
+  isLoading,
+}: {
+  notes: LiveCorrectionNote[];
+  feedbackItems: SessionFeedback[];
+  isLoading: boolean;
+}) {
+  const hasHistory = notes.length > 0 || feedbackItems.length > 0;
+
+  return (
+    <Card className="p-6">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <Badge variant="neutral">Previous sessions</Badge>
+
+          <h2 className="mt-4 text-2xl font-black text-slate-950">
+            Practice history
+          </h2>
+
+          <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">
+            Review correction notes and feedback from completed speaking
+            sessions. This block currently uses available notes and feedback
+            endpoints.
+          </p>
+        </div>
+
+        <Badge variant="info">{notes.length + feedbackItems.length}</Badge>
+      </div>
+
+      {isLoading ? (
+        <div className="mt-5 rounded-2xl border border-dashed border-indigo-200 bg-indigo-50 p-6">
+          <p className="text-base font-bold text-indigo-700">
+            Loading previous session activity...
+          </p>
+        </div>
+      ) : hasHistory ? (
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+            <h3 className="text-xl font-black text-slate-950">
+              Recent correction notes
+            </h3>
+
+            <div className="mt-4 space-y-3">
+              {notes.slice(0, 3).map((note) => (
+                <div
+                  key={note.id}
+                  className="rounded-2xl border border-slate-200 bg-white p-4"
+                >
+                  <p className="text-sm font-bold leading-6 text-slate-700">
+                    {note.note_text}
+                  </p>
+
+                  <p className="mt-2 text-xs font-bold text-slate-400">
+                    Room: {formatShortRoomId(note.room_id)}
+                  </p>
+                </div>
+              ))}
+
+              {notes.length === 0 && (
+                <p className="text-base font-semibold text-slate-500">
+                  No correction notes yet.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+            <h3 className="text-xl font-black text-slate-950">
+              Recent feedback
+            </h3>
+
+            <div className="mt-4 space-y-3">
+              {feedbackItems.slice(0, 3).map((item, index) => (
+                <div
+                  key={`${item.feedback}-${index}`}
+                  className="rounded-2xl border border-slate-200 bg-white p-4"
+                >
+                  <p className="text-sm font-bold leading-6 text-slate-700">
+                    {item.feedback}
+                  </p>
+                </div>
+              ))}
+
+              {feedbackItems.length === 0 && (
+                <p className="text-base font-semibold text-slate-500">
+                  No feedback yet.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6">
+          <p className="text-base font-bold text-slate-600">
+            No previous sessions yet.
+          </p>
+
+          <p className="mt-2 text-base leading-7 text-slate-500">
+            Correction notes and feedback will appear here after your speaking
+            sessions.
+          </p>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function DashboardPage() {
-  const [incomingInvitations, setIncomingInvitations] = useState(
-    mockIncomingInvitations,
-  );
-  const [outgoingInvitations, setOutgoingInvitations] = useState(
-    mockOutgoingInvitations,
-  );
-  const [selectedInvitation, setSelectedInvitation] =
-    useState<SessionInvitation | null>(null);
+  const router = useRouter();
 
-  const activeSessionInvitation = useMemo(
-    () =>
-      getActiveSessionInvitation(outgoingInvitations, incomingInvitations),
-    [outgoingInvitations, incomingInvitations],
-  );
+  const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
+  const [hasBackendActiveRoomConflict, setHasBackendActiveRoomConflict] =
+    useState(false);
 
-  const sortedIncomingInvitations = useMemo(
-    () =>
-      sortInvitations(
-        incomingInvitations,
-        "incoming",
-        activeSessionInvitation,
-      ),
-    [incomingInvitations, activeSessionInvitation],
-  );
+  const [pendingInvitations, setPendingInvitations] = useState<
+    RoomInvitation[]
+  >([]);
+  const [notes, setNotes] = useState<LiveCorrectionNote[]>([]);
+  const [feedbackItems, setFeedbackItems] = useState<SessionFeedback[]>([]);
 
-  const sortedOutgoingInvitations = useMemo(
-    () =>
-      sortInvitations(
-        outgoingInvitations,
-        "outgoing",
-        activeSessionInvitation,
-      ),
-    [outgoingInvitations, activeSessionInvitation],
-  );
+  const [isLoadingInvitations, setIsLoadingInvitations] = useState(true);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
+  const [isFindingMatch, setIsFindingMatch] = useState(false);
+  const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
+  const [decliningRoomId, setDecliningRoomId] = useState<string | null>(null);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
 
-  function removeIncomingInvitation(invitationId: string) {
-    setIncomingInvitations((currentInvitations) =>
-      currentInvitations.filter((invitation) => invitation.id !== invitationId),
-    );
+  const loadPendingInvitations = useCallback(async (silent = false) => {
+    if (!silent) {
+      setIsLoadingInvitations(true);
+    }
+
+    try {
+      const data = await getPendingInvitations();
+
+      setPendingInvitations(data.invitations || []);
+      setLastUpdatedAt(new Date());
+    } catch (error) {
+      if (!silent) {
+        setDashboardError(
+          error instanceof Error
+            ? error.message
+            : "Failed to load pending invitations",
+        );
+      }
+    } finally {
+      if (!silent) {
+        setIsLoadingInvitations(false);
+      }
+    }
+  }, []);
+
+  const loadPreviousActivity = useCallback(async () => {
+    setIsLoadingHistory(true);
+
+    try {
+      const [loadedNotes, loadedFeedback] = await Promise.all([
+        getLiveCorrectionNotes(),
+        getSessionFeedback(),
+      ]);
+
+      setNotes(Array.isArray(loadedNotes) ? loadedNotes : []);
+      setFeedbackItems(Array.isArray(loadedFeedback) ? loadedFeedback : []);
+    } catch {
+      setNotes([]);
+      setFeedbackItems([]);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const token = getAccessToken();
+
+    if (!token) {
+      router.replace("/login");
+      return;
+    }
+
+    const initialLoadTimeoutId = window.setTimeout(() => {
+      setActiveRoomId(getActiveRoomId());
+      void loadPendingInvitations();
+      void loadPreviousActivity();
+    }, 0);
+
+    const intervalId = window.setInterval(() => {
+      void loadPendingInvitations(true);
+    }, 3000);
+
+    return () => {
+      window.clearTimeout(initialLoadTimeoutId);
+      window.clearInterval(intervalId);
+    };
+  }, [loadPendingInvitations, loadPreviousActivity, router]);
+
+  async function handleFindMatch() {
+    setDashboardError(null);
+    setHasBackendActiveRoomConflict(false);
+    setIsFindingMatch(true);
+
+    try {
+      const match = await findMatch();
+
+      saveSessionPartnerUserId(match.room_id, match.invited_user_id);
+      saveActiveRoomId(match.room_id);
+      setActiveRoomId(match.room_id);
+
+      router.push(`/session/${match.room_id}`);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to find a speaking partner";
+
+      setDashboardError(message);
+
+      if (isActiveRoomConflict(message) && !getActiveRoomId()) {
+        setHasBackendActiveRoomConflict(true);
+      }
+    } finally {
+      setIsFindingMatch(false);
+    }
   }
 
-  function removeOutgoingInvitation(invitationId: string) {
-    setOutgoingInvitations((currentInvitations) =>
-      currentInvitations.filter((invitation) => invitation.id !== invitationId),
-    );
+  async function handleJoinInvitation(invitation: RoomInvitation) {
+    setDashboardError(null);
+    setHasBackendActiveRoomConflict(false);
+    setJoiningRoomId(invitation.room_id);
+
+    try {
+      await joinRoom(invitation.room_id);
+
+      saveSessionPartnerUserId(
+        invitation.room_id,
+        invitation.creator_user_id,
+      );
+
+      saveActiveRoomId(invitation.room_id);
+      setActiveRoomId(invitation.room_id);
+
+      router.push(`/session/${invitation.room_id}`);
+    } catch (error) {
+      setDashboardError(
+        error instanceof Error ? error.message : "Failed to join room",
+      );
+    } finally {
+      setJoiningRoomId(null);
+    }
+  }
+
+  async function handleDeclineInvitation(invitation: RoomInvitation) {
+    setDashboardError(null);
+    setDecliningRoomId(invitation.room_id);
+
+    try {
+      await declineInvitation(invitation.room_id);
+
+      setPendingInvitations((currentInvitations) =>
+        currentInvitations.filter(
+          (currentInvitation) =>
+            currentInvitation.room_id !== invitation.room_id,
+        ),
+      );
+    } catch (error) {
+      setDashboardError(
+        error instanceof Error
+          ? error.message
+          : "Failed to decline invitation",
+      );
+    } finally {
+      setDecliningRoomId(null);
+    }
+  }
+
+  function handleContinueActiveRoom() {
+    if (!activeRoomId) {
+      return;
+    }
+
+    router.push(`/session/${activeRoomId}`);
+  }
+
+  function handleForgetActiveRoom() {
+    removeActiveRoomId();
+    setActiveRoomId(null);
+    setHasBackendActiveRoomConflict(false);
   }
 
   return (
     <PageContainer>
-      {selectedInvitation && (
-        <PartnerProfilePreview
-          invitation={selectedInvitation}
-          onClose={() => setSelectedInvitation(null)}
-        />
-      )}
+      <div className="mb-7">
+        <Badge variant="success">Sessions dashboard</Badge>
 
-      <div className="mb-7 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <Badge variant="success">Sessions dashboard</Badge>
+        <h1 className="mt-4 text-4xl font-black tracking-tight text-slate-950">
+          Your speaking sessions
+        </h1>
 
-          <h1 className="mt-4 text-4xl font-black tracking-tight text-slate-950">
-            Your speaking sessions
-          </h1>
-
-          <p className="mt-3 max-w-3xl text-lg leading-8 text-slate-600">
-            Manage your active session and partner invitations in one place.
-          </p>
-        </div>
-
-        <Button size="md">Find partner</Button>
+        <p className="mt-3 max-w-3xl text-lg leading-8 text-slate-600">
+          Find a suitable speaking partner, accept incoming invitations, and
+          review your previous speaking practice.
+        </p>
       </div>
 
-      <section>
-        <Card className="border-indigo-100 bg-gradient-to-br from-indigo-50 via-white to-white p-6">
-          {activeSessionInvitation ? (
-            <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+      {dashboardError && (
+        <div className="mb-6 rounded-2xl bg-red-50 px-5 py-4 text-base font-bold text-red-700 ring-1 ring-red-100">
+          {dashboardError}
+        </div>
+      )}
+
+      {hasBackendActiveRoomConflict && !activeRoomId && (
+        <section className="mb-7">
+          <Card className="border-amber-100 bg-amber-50 p-6">
+            <Badge variant="warning">Active room conflict</Badge>
+
+            <h2 className="mt-4 text-2xl font-black text-slate-950">
+              Backend says you are already in an active room
+            </h2>
+
+            <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">
+              The backend reports that this user already has an active room, but
+              the frontend cannot recover the room ID yet. Reliable recovery
+              requires a backend endpoint such as GET /api/v1/audio/active-room.
+            </p>
+          </Card>
+        </section>
+      )}
+
+      {activeRoomId && (
+        <section className="mb-7">
+          <Card className="border-indigo-100 bg-indigo-50 p-6">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <Badge variant="success">Active session ready</Badge>
+                <Badge variant="info">Active session</Badge>
 
-                <h2 className="mt-3 text-3xl font-black tracking-tight text-slate-950">
-                  Session with {activeSessionInvitation.partnerName}
+                <h2 className="mt-4 text-2xl font-black text-slate-950">
+                  Continue current room
                 </h2>
-
-                <p className="mt-2 text-lg font-bold text-indigo-700">
-                  {activeSessionInvitation.templateTitle}
-                </p>
 
                 <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">
-                  Your guided audio room is ready. Other pending invitations are
-                  closed because only one active session is allowed at a time.
+                  You have a locally remembered active room. Use this button if
+                  you opened Profile or another page and want to return to the
+                  session.
+                </p>
+
+                <p className="mt-3 break-all font-mono text-sm font-black text-indigo-800">
+                  {activeRoomId}
                 </p>
               </div>
 
-              <div className="shrink-0">
-                <AudioRoom />
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-7 lg:flex-row lg:items-center lg:justify-between">
-              <div>
-                <Badge variant="info">No active session</Badge>
+              <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
+                <Button type="button" onClick={handleContinueActiveRoom}>
+                  Continue session
+                </Button>
 
-                <h2 className="mt-5 text-3xl font-black tracking-tight text-slate-950">
-                  Find a partner to start practicing
-                </h2>
-
-                <p className="mt-4 max-w-2xl text-lg leading-8 text-slate-600">
-                  Send invitations to several suitable partners. When someone
-                  accepts, SpeakFlow will create one active guided audio session.
-                  Or create an audio room directly to practice.
-                </p>
-
-                <Button className="mt-6" size="lg">
-                  Find partner
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleForgetActiveRoom}
+                >
+                  Hide
                 </Button>
               </div>
+            </div>
+          </Card>
+        </section>
+      )}
 
-              <div className="shrink-0">
-                <AudioRoom />
-              </div>
+      <section className="mb-7">
+        <Card className="p-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <Badge variant="info">Find match</Badge>
+
+              <h2 className="mt-4 text-2xl font-black text-slate-950">
+                Start a new audio session
+              </h2>
+
+              <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">
+                When you click Find partner, the backend creates a room, selects
+                a matched available user, stores the invitation in the database,
+                and opens the waiting room.
+              </p>
+            </div>
+
+            <Button
+              type="button"
+              onClick={handleFindMatch}
+              disabled={isFindingMatch}
+            >
+              {isFindingMatch ? "Creating room..." : "Find partner"}
+            </Button>
+          </div>
+        </Card>
+      </section>
+
+      <section className="mb-7">
+        <Card className="p-6">
+          <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <Badge
+                variant={pendingInvitations.length > 0 ? "warning" : "info"}
+              >
+                Incoming invitations
+              </Badge>
+
+              <h2 className="mt-4 text-2xl font-black text-slate-950">
+                Room invitations
+              </h2>
+
+              <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">
+                This list refreshes automatically every 3 seconds. If someone
+                invites you to a room, the invitation will appear here.
+              </p>
+
+              {lastUpdatedAt && (
+                <p className="mt-2 text-sm font-bold text-slate-400">
+                  Last checked: {lastUpdatedAt.toLocaleTimeString()}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Badge variant="info">{pendingInvitations.length}</Badge>
+
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void loadPendingInvitations()}
+                disabled={isLoadingInvitations}
+              >
+                {isLoadingInvitations ? "Refreshing..." : "Refresh"}
+              </Button>
+            </div>
+          </div>
+
+          {isLoadingInvitations ? (
+            <div className="rounded-2xl border border-dashed border-indigo-200 bg-indigo-50 p-6">
+              <p className="text-base font-bold text-indigo-700">
+                Loading incoming invitations...
+              </p>
+            </div>
+          ) : pendingInvitations.length > 0 ? (
+            <div className="max-h-[520px] space-y-4 overflow-y-auto pr-2">
+              {pendingInvitations.map((invitation) => (
+                <InvitationCard
+                  key={invitation.room_id}
+                  invitation={invitation}
+                  isJoining={joiningRoomId === invitation.room_id}
+                  isDeclining={decliningRoomId === invitation.room_id}
+                  onJoin={handleJoinInvitation}
+                  onDecline={handleDeclineInvitation}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6">
+              <p className="text-base font-bold text-slate-600">
+                No incoming invitations right now.
+              </p>
+
+              <p className="mt-2 text-base leading-7 text-slate-500">
+                Keep this dashboard open. Invitations will appear here
+                automatically when another user finds you as a matched partner.
+              </p>
             </div>
           )}
         </Card>
       </section>
 
-      <section className="mt-7 grid gap-5 xl:grid-cols-2">
-        <Card className="p-6">
-          <div className="mb-5 flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-black text-slate-950">
-                Incoming invitations
-              </h2>
-              <p className="mt-2 text-base leading-7 text-slate-600">
-                Review partner requests and accept one suitable invitation.
-              </p>
-            </div>
-
-            <Badge variant="info">{sortedIncomingInvitations.length}</Badge>
-          </div>
-
-          <div className="space-y-4">
-            {sortedIncomingInvitations.length > 0 ? (
-              sortedIncomingInvitations.map((invitation) => (
-                <InvitationCard
-                  key={invitation.id}
-                  invitation={invitation}
-                  type="incoming"
-                  activeSessionInvitation={activeSessionInvitation}
-                  onViewProfile={setSelectedInvitation}
-                  onRemove={removeIncomingInvitation}
-                />
-              ))
-            ) : (
-              <p className="rounded-2xl bg-slate-50 p-4 text-base font-semibold text-slate-500">
-                No incoming invitations.
-              </p>
-            )}
-          </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="mb-5 flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-2xl font-black text-slate-950">
-                Outgoing invitations
-              </h2>
-              <p className="mt-2 text-base leading-7 text-slate-600">
-                Track invitations you sent to potential speaking partners.
-              </p>
-            </div>
-
-            <Badge variant="info">{sortedOutgoingInvitations.length}</Badge>
-          </div>
-
-          <div className="space-y-4">
-            {sortedOutgoingInvitations.length > 0 ? (
-              sortedOutgoingInvitations.map((invitation) => (
-                <InvitationCard
-                  key={invitation.id}
-                  invitation={invitation}
-                  type="outgoing"
-                  activeSessionInvitation={activeSessionInvitation}
-                  onViewProfile={setSelectedInvitation}
-                  onRemove={removeOutgoingInvitation}
-                />
-              ))
-            ) : (
-              <p className="rounded-2xl bg-slate-50 p-4 text-base font-semibold text-slate-500">
-                No outgoing invitations.
-              </p>
-            )}
-          </div>
-        </Card>
-      </section>
+      <PreviousSessionsPreview
+        notes={notes}
+        feedbackItems={feedbackItems}
+        isLoading={isLoadingHistory}
+      />
     </PageContainer>
   );
 }

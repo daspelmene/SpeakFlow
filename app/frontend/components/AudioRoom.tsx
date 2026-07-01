@@ -1,259 +1,212 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useAudioRoom } from "@/hooks/useAudioRoom";
+import { useEffect, useRef } from "react";
+
+import {
+  useAudioRoom,
+  type Participant,
+  type RoomStatus,
+} from "@/hooks/useAudioRoom";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 
-// ------------------------------------------------------------------
-// Status badge colors
-// ------------------------------------------------------------------
+type AudioRoomStateSnapshot = {
+  status: RoomStatus;
+  roomId: string | null;
+  userSlot: string | null;
+  participants: Participant[];
+};
 
-const statusColors: Record<string, string> = {
+type AudioRoomProps = {
+  initialRoomId?: string;
+  showRoomCode?: boolean;
+  onEnd?: () => void;
+  onRoomStateChange?: (state: AudioRoomStateSnapshot) => void;
+};
+
+const statusLabels: Record<RoomStatus, string> = {
+  idle: "Not connected",
+  creating: "Creating room",
+  connecting: "Connecting",
+  waiting: "Waiting for partner",
+  active: "Active call",
+  ended: "Finished",
+};
+
+const statusClasses: Record<RoomStatus, string> = {
   idle: "bg-slate-100 text-slate-600",
   creating: "bg-amber-100 text-amber-700",
+  connecting: "bg-indigo-100 text-indigo-700",
   waiting: "bg-sky-100 text-sky-700",
   active: "bg-emerald-100 text-emerald-700",
   ended: "bg-slate-100 text-slate-600",
 };
 
-const statusLabels: Record<string, string> = {
-  idle: "Не в звонке",
-  creating: "Создание комнаты…",
-  waiting: "Ожидание собеседника…",
-  active: "Разговор",
-  ended: "Звонок завершён",
-};
+function getParticipantLabel(participant: Participant) {
+  if (participant.name) {
+    return participant.name;
+  }
 
-// ------------------------------------------------------------------
-// Component
-// ------------------------------------------------------------------
+  return participant.slot === "user1" ? "Room creator" : "Invited partner";
+}
 
-type AudioRoomProps = {
-  /** Pre-set room ID to join on mount (e.g. from invitation) */
-  initialRoomId?: string;
-  /** Called when call ends */
-  onEnd?: () => void;
-};
-
-export default function AudioRoom({ initialRoomId, onEnd }: AudioRoomProps) {
+export default function AudioRoom({
+  initialRoomId,
+  showRoomCode = true,
+  onEnd,
+  onRoomStateChange,
+}: AudioRoomProps) {
   const {
     status,
     roomId,
+    userSlot,
     participants,
     isMuted,
     error,
     remoteAudioElement,
-    createRoom,
     joinRoom,
     leaveRoom,
     toggleMute,
   } = useAudioRoom();
 
-  const [showJoinInput, setShowJoinInput] = useState(false);
-  const [joinCode, setJoinCode] = useState("");
-  const [copied, setCopied] = useState(false);
+  const hasAutoJoinedRef = useRef(false);
 
-  // Ensure remote audio plays when the element is ready.
-  // WSAudioClient creates its own Audio element with MediaSource URL —
-  // it plays through the default audio output without needing to be in the DOM.
+  useEffect(() => {
+    if (!initialRoomId || hasAutoJoinedRef.current || status !== "idle") {
+      return;
+    }
+
+    hasAutoJoinedRef.current = true;
+    void joinRoom(initialRoomId);
+  }, [initialRoomId, joinRoom, status]);
+
+  useEffect(() => {
+    onRoomStateChange?.({
+      status,
+      roomId,
+      userSlot,
+      participants,
+    });
+  }, [status, roomId, userSlot, participants, onRoomStateChange]);
+
+  useEffect(() => {
+    if (status === "ended") {
+      onEnd?.();
+    }
+  }, [status, onEnd]);
+
   useEffect(() => {
     if (remoteAudioElement) {
       remoteAudioElement.play().catch(() => {
-        // Autoplay may be blocked until user interaction
+        // Browser may block autoplay until user interaction.
       });
     }
   }, [remoteAudioElement]);
 
-  // Auto-join if initialRoomId provided
-  useEffect(() => {
-    if (initialRoomId && status === "idle") {
-      joinRoom(initialRoomId);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialRoomId]);
+  const canUseMicrophone =
+    status === "waiting" || status === "active" || status === "connecting";
 
-  // Call onEnd when status becomes "ended"
-  useEffect(() => {
-    if (status === "ended" && onEnd) onEnd();
-  }, [status, onEnd]);
-
-  const handleCopyCode = async () => {
-    if (!roomId) return;
-    try {
-      await navigator.clipboard.writeText(roomId);
-      setCopied(true);
-    } catch {
-      // Fallback: select text manually
-      const el = document.querySelector("[data-room-code]") as HTMLElement | null;
-      if (el) {
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        const sel = window.getSelection();
-        sel?.removeAllRanges();
-        sel?.addRange(range);
-      }
-    }
-  };
-
-  // Reset join input when leaving idle
-  useEffect(() => {
-    if (status !== "idle") {
-      setShowJoinInput(false);
-      setJoinCode("");
-    }
-  }, [status]);
-
-  // Reset "copied" badge after 2 seconds
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(timer);
-  }, [copied]);
-
-  const handleJoinSubmit = () => {
-    const code = joinCode.trim();
-    if (code) {
-      joinRoom(code);
-    }
-  };
+  const canLeaveRoom =
+    status === "waiting" || status === "active" || status === "connecting";
 
   return (
-    <Card className="flex flex-col gap-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold text-slate-900">🎙️ Аудио-комната</h3>
+    <Card className="p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-black tracking-tight text-slate-950">
+            Audio room
+          </h2>
+
+          <p className="mt-2 text-base leading-7 text-slate-600">
+            SpeakFlow uses a WebSocket audio room for live speaking practice.
+          </p>
+        </div>
+
         <span
-          className={`rounded-full px-3 py-1 text-xs font-semibold ${statusColors[status] || statusColors.idle}`}
+          className={`inline-flex rounded-full px-4 py-2 text-sm font-black ${
+            statusClasses[status]
+          }`}
         >
-          {statusLabels[status] || status}
+          {statusLabels[status]}
         </span>
       </div>
 
-      {/* Room ID */}
-      {roomId && (
-        <div className="rounded-xl bg-slate-50 px-4 py-3 text-center">
-          <p className="text-xs font-medium text-slate-500">Код комнаты</p>
-          <p
-            data-room-code
-            className="mt-1 font-mono text-2xl font-bold tracking-widest text-slate-900"
-          >
+      {showRoomCode && roomId && (
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-black uppercase tracking-wide text-slate-400">
+            Room ID
+          </p>
+
+          <p className="mt-1 break-all font-mono text-lg font-black text-slate-950">
             {roomId}
           </p>
-          <button
-            onClick={handleCopyCode}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200 hover:text-slate-900"
-          >
-            {copied ? "✅ Скопировано!" : "📋 Скопировать код"}
-          </button>
-          <p className="mt-1 text-xs text-slate-400">
-            Поделитесь этим кодом с собеседником
-          </p>
         </div>
       )}
 
-      {/* Join room input */}
-      {status === "idle" && showJoinInput && (
-        <div className="flex flex-col gap-3 rounded-xl bg-slate-50 p-4">
-          <label className="text-sm font-medium text-slate-600">
-            Введите код комнаты:
-          </label>
-          <input
-            type="text"
-            value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleJoinSubmit();
-            }}
-            placeholder="Например: a1b2c3d4"
-            maxLength={8}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 font-mono text-lg tracking-widest text-slate-900 placeholder:text-slate-300 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-            autoFocus
-          />
-          <div className="flex gap-2">
-            <Button onClick={handleJoinSubmit} size="md">
-              📞 Войти
-            </Button>
-            <Button
-              onClick={() => {
-                setShowJoinInput(false);
-                setJoinCode("");
-              }}
-              variant="ghost"
-              size="md"
-            >
-              Отмена
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {/* Participants */}
       {participants.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <p className="text-sm font-medium text-slate-600">Участники:</p>
-          {participants.map((p) => (
+        <div className="mt-5 space-y-3">
+          <p className="text-sm font-black uppercase tracking-wide text-slate-400">
+            Participants
+          </p>
+
+          {participants.map((participant) => (
             <div
-              key={p.slot}
-              className="flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2"
+              key={participant.slot}
+              className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
             >
-              <span className="text-lg">👤</span>
-              <span className="text-sm font-medium text-slate-800">
-                {p.name || `Участник (${p.slot})`}
+              <div>
+                <p className="text-base font-black text-slate-900">
+                  {getParticipantLabel(participant)}
+                </p>
+
+                <p className="text-sm font-bold text-slate-500">
+                  {participant.slot}
+                  {participant.slot === userSlot ? " · you" : ""}
+                </p>
+              </div>
+
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
+                {participant.muted ? "Muted" : "Microphone active"}
               </span>
-              {p.slot === "user1" && (
-                <span className="ml-auto rounded-full bg-indigo-100 px-2 py-0.5 text-xs text-indigo-600">
-                  Создатель
-                </span>
-              )}
             </div>
           ))}
         </div>
       )}
 
-      {/* Error message */}
-      {error && (
-        <div className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-          ❌ {error}
+      {status === "waiting" && (
+        <div className="mt-5 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
+          <p className="text-sm font-bold leading-6 text-amber-800">
+            Waiting for the invited partner to join. Guided session content will
+            appear after both participants are connected.
+          </p>
         </div>
       )}
 
-      {/* Controls */}
-      <div className="flex flex-wrap gap-3">
-        {status === "idle" && !showJoinInput && (
-          <>
-            <Button onClick={createRoom} variant="primary">
-              📞 Создать комнату
-            </Button>
-            <Button onClick={() => setShowJoinInput(true)} variant="secondary">
-              🔗 Войти по коду
-            </Button>
-          </>
-        )}
+      {status === "ended" && (
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+          <p className="text-sm font-bold leading-6 text-slate-700">
+            This room has ended. You can return to the dashboard using the top
+            navigation.
+          </p>
+        </div>
+      )}
 
-        {status === "active" && (
-          <>
-            <Button
-              onClick={toggleMute}
-              variant={isMuted ? "danger" : "secondary"}
-            >
-              {isMuted ? "🔇 Включить микрофон" : "🎤 Выключить микрофон"}
-            </Button>
-            <Button onClick={leaveRoom} variant="danger">
-              📞 Завершить звонок
-            </Button>
-          </>
-        )}
+      {error && (
+        <div className="mt-5 rounded-2xl border border-red-100 bg-red-50 px-4 py-3">
+          <p className="text-sm font-bold leading-6 text-red-700">{error}</p>
+        </div>
+      )}
 
-        {(status === "waiting") && (
-          <Button onClick={leaveRoom} variant="ghost">
-            ✕ Отменить
+      <div className="mt-5 flex flex-wrap gap-3">
+        {canUseMicrophone && (
+          <Button type="button" variant="secondary" onClick={toggleMute}>
+            {isMuted ? "Unmute microphone" : "Mute microphone"}
           </Button>
         )}
 
-        {status === "ended" && (
-          <Button onClick={leaveRoom} variant="secondary">
-            Закрыть
+        {canLeaveRoom && (
+          <Button type="button" variant="danger" onClick={() => void leaveRoom()}>
+            Leave room
           </Button>
         )}
       </div>
