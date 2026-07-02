@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -17,7 +16,6 @@ services:
 
   backend:
     image: semyonnadutkin/speakflow-backend:latest
-    container_name: backend
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,7 +33,6 @@ services:
 
   frontend:
     image: semyonnadutkin/speakflow-frontend:latest
-    container_name: frontend
     depends_on:
       - backend
     hostname: frontend
@@ -43,5 +40,4 @@ services:
 
 volumes:
   postgres_data:
-    name: postgres_data
   recordings:  
