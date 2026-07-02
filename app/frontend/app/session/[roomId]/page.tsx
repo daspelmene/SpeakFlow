@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 
 import AudioRoom from "@/components/AudioRoom";
+import VocabularyHints from "@/components/VocabularyHints";
 import PageContainer from "@/components/layout/PageContainer";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -56,6 +57,32 @@ const usefulWords = [
   {
     word: "improve",
     meaning: "To become better at something.",
+  },
+  {
+    word: "Could you repeat that, please?",
+    meaning: "A polite phrase to ask your partner to say something again.",
+  },
+  {
+    word: "In my opinion...",
+    meaning: "A phrase for starting your answer or sharing your point of view.",
+  },
+  {
+    word: "What do you think about...?",
+    meaning:
+      "A phrase for asking your partner for an opinion and continuing the conversation.",
+  },
+  {
+    word: "For example...",
+    meaning: "A phrase for adding details or explaining your idea more clearly.",
+  },
+  {
+    word: "I agree with you because...",
+    meaning: "A phrase for responding to your partner and giving a reason.",
+  },
+  {
+    word: "That reminds me of...",
+    meaning:
+      "A phrase for connecting your partner's idea with your own experience.",
   },
 ];
 
@@ -348,30 +375,7 @@ export default function SessionRoomPage() {
                 </div>
               </Card>
 
-              <Card className="p-6">
-                <Badge variant="success">Vocabulary hints</Badge>
-
-                <h2 className="mt-4 text-2xl font-black text-slate-950">
-                  Useful words
-                </h2>
-
-                <div className="mt-5 space-y-3">
-                  {usefulWords.map((item) => (
-                    <div
-                      key={item.word}
-                      className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                    >
-                      <p className="text-lg font-black text-slate-950">
-                        {item.word}
-                      </p>
-
-                      <p className="mt-1 text-base leading-7 text-slate-600">
-                        {item.meaning}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </Card>
+              <VocabularyHints hints={usefulWords} />
             </>
           ) : (
             <Card className="p-6">
