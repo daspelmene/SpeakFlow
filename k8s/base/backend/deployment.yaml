@@ -32,6 +32,12 @@ spec:
             cpu: 500m
 
         env:
+        - name: DEEPSEEK_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: backend-secret
+              key: deepseek_api_key
+
         - name: JWT_ALGORITHM
           valueFrom:
             configMapKeyRef:
