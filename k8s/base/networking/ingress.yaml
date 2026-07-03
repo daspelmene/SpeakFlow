@@ -2,10 +2,6 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: speakflow-ingress
-  annotations:
-    # Traefik: disable response header timeout for WebSocket audio streams
-    # (connections stay open for the duration of the call)
-    traefik.ingress.kubernetes.io/router.middlewares: default-ws-long-timeout@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
