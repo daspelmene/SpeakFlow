@@ -17,6 +17,10 @@ import {
   type SessionFeedback,
 } from "@/lib/sessionActivityApi";
 import { getSessionPartnerUserId } from "@/lib/sessionPartnerStorage";
+import {
+  getSessionTemplates,
+  type SessionTemplate,
+} from "@/lib/sessionTemplateApi";
 import type { Participant, RoomStatus } from "@/hooks/useAudioRoom";
 
 type AudioRoomStateSnapshot = {
@@ -27,64 +31,6 @@ type AudioRoomStateSnapshot = {
 };
 
 type SessionRole = "helper" | "learner" | "unknown";
-
-const sessionTopic = {
-  title: "Getting to know each other",
-  description:
-    "Practice introductions, personal interests, travel plans, and everyday conversation.",
-};
-
-const topicQuestions = [
-  "Introduce yourself and tell your partner why you are learning this language.",
-  "Describe a place you would like to travel to and explain why.",
-  "Talk about your hobbies and ask your partner follow-up questions.",
-  "Describe a recent challenge and how you solved it.",
-];
-
-const usefulWords = [
-  {
-    word: "conversation",
-    meaning: "A talk between two or more people.",
-  },
-  {
-    word: "fluency",
-    meaning: "The ability to speak smoothly and naturally.",
-  },
-  {
-    word: "confidence",
-    meaning: "The feeling that you can do something well.",
-  },
-  {
-    word: "improve",
-    meaning: "To become better at something.",
-  },
-  {
-    word: "Could you repeat that, please?",
-    meaning: "A polite phrase to ask your partner to say something again.",
-  },
-  {
-    word: "In my opinion...",
-    meaning: "A phrase for starting your answer or sharing your point of view.",
-  },
-  {
-    word: "What do you think about...?",
-    meaning:
-      "A phrase for asking your partner for an opinion and continuing the conversation.",
-  },
-  {
-    word: "For example...",
-    meaning: "A phrase for adding details or explaining your idea more clearly.",
-  },
-  {
-    word: "I agree with you because...",
-    meaning: "A phrase for responding to your partner and giving a reason.",
-  },
-  {
-    word: "That reminds me of...",
-    meaning:
-      "A phrase for connecting your partner's idea with your own experience.",
-  },
-];
 
 function getRole(userSlot: string | null): SessionRole {
   if (!userSlot) {
@@ -159,6 +105,8 @@ export default function SessionRoomPage() {
   const [partnerUserIdFromStorage, setPartnerUserIdFromStorage] = useState<
     number | null
   >(null);
+  const [sessionTemplate, setSessionTemplate] =
+    useState<SessionTemplate | null>(null);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -169,6 +117,38 @@ export default function SessionRoomPage() {
       window.clearTimeout(timeoutId);
     };
   }, [roomId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadTemplate() {
+      try {
+        const templates = await getSessionTemplates();
+        const firstTemplate = Object.values(templates)[0] ?? null;
+
+        if (isMounted) {
+          setSessionTemplate(firstTemplate);
+        }
+      } catch {
+        if (isMounted) {
+          setSessionTemplate(null);
+        }
+      }
+    }
+
+    void loadTemplate();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const topicCards = sessionTemplate?.topic_cards ?? [];
+
+  const vocabularyHints = useMemo(
+    () => topicCards.flatMap((card) => card.vocabulary),
+    [topicCards],
+  );
 
   const targetUserId = useMemo(() => {
     const partner = participants.find(
@@ -338,44 +318,43 @@ export default function SessionRoomPage() {
                 <Badge variant="info">Session topic</Badge>
 
                 <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-950">
-                  {sessionTopic.title}
+                  {sessionTemplate?.title ?? "Loading session topic..."}
                 </h2>
 
                 <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
-                  {sessionTopic.description}
+                  Use the topic cards below to keep the speaking session
+                  structured.
                 </p>
               </Card>
 
-              <Card className="p-6">
-                <Badge variant="info">Topic card</Badge>
+              {topicCards.map((card) => (
+                <Card key={card.id} className="p-6">
+                  <Badge variant="info">Topic card</Badge>
 
-                <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-950">
-                  Guided speaking questions
-                </h2>
+                  <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-950">
+                    {card.title}
+                  </h2>
 
-                <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
-                  Use these questions to keep the speaking session structured.
-                </p>
+                  <div className="mt-5 space-y-3">
+                    {card.questions.map((question, index) => (
+                      <div
+                        key={question}
+                        className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                      >
+                        <p className="text-sm font-black uppercase tracking-wide text-indigo-500">
+                          Question {index + 1}
+                        </p>
 
-                <div className="mt-5 space-y-3">
-                  {topicQuestions.map((question, index) => (
-                    <div
-                      key={question}
-                      className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                    >
-                      <p className="text-sm font-black uppercase tracking-wide text-indigo-500">
-                        Question {index + 1}
-                      </p>
+                        <p className="mt-1 text-base font-bold leading-7 text-slate-900">
+                          {question}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              ))}
 
-                      <p className="mt-1 text-base font-bold leading-7 text-slate-900">
-                        {question}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-
-              <VocabularyHints hints={usefulWords} />
+              <VocabularyHints hints={vocabularyHints} />
             </>
           ) : (
             <Card className="p-6">

@@ -4,8 +4,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { removeActiveRoomId, saveActiveRoomId } from "@/lib/activeRoomStorage";
 import { getAccessToken } from "@/lib/auth";
-import { findMatch, leaveRoom as leaveCurrentRoom } from "@/lib/roomApi";
+import { createRoom as createRoomApi, leaveRoom as leaveCurrentRoom } from "@/lib/roomApi";
 import { WSAudioClient } from "@/lib/wsAudio";
+
+// Keepalive: proxies (e.g. the ingress) silently drop idle WebSockets,
+// which kills audio after a long mute or while waiting alone in a room.
+// The client pings periodically; a missing pong means the connection is
+// dead and we must reconnect.
+const PING_INTERVAL_MS = 20_000;
+const PONG_TIMEOUT_MS = 45_000;
+const MAX_RECONNECT_ATTEMPTS = 5;
+const RECONNECT_BASE_DELAY_MS = 1_000;
 
 // ------------------------------------------------------------------
 // Types
@@ -130,6 +139,15 @@ export function useAudioRoom() {
   const sentBinaryFramesRef = useRef(0);
   const receivedBinaryFramesRef = useRef(0);
 
+  const heartbeatIntervalRef = useRef<number | null>(null);
+  const lastPongRef = useRef(0);
+  const manualCloseRef = useRef(false);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const connectToRoomRef = useRef<((roomId: string) => Promise<void>) | null>(
+    null,
+  );
+
   const update = useCallback((partial: Partial<AudioRoomState>) => {
     setState((previousState) => ({ ...previousState, ...partial }));
   }, []);
@@ -137,6 +155,53 @@ export function useAudioRoom() {
   const sendWs = useCallback((data: Record<string, unknown>) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(data));
+    }
+  }, []);
+
+  // ------------------------------------------------------------------
+  // Keepalive heartbeat
+  // ------------------------------------------------------------------
+
+  const stopHeartbeat = useCallback(() => {
+    if (heartbeatIntervalRef.current !== null) {
+      window.clearInterval(heartbeatIntervalRef.current);
+      heartbeatIntervalRef.current = null;
+    }
+  }, []);
+
+  const startHeartbeat = useCallback(
+    (ws: WebSocket) => {
+      stopHeartbeat();
+
+      lastPongRef.current = Date.now();
+
+      heartbeatIntervalRef.current = window.setInterval(() => {
+        if (wsRef.current !== ws || ws.readyState !== WebSocket.OPEN) {
+          stopHeartbeat();
+          return;
+        }
+
+        if (Date.now() - lastPongRef.current > PONG_TIMEOUT_MS) {
+          console.warn(
+            "[AudioRoom] Heartbeat timed out, closing stale WebSocket",
+          );
+
+          stopHeartbeat();
+          // Triggers onclose, which schedules a reconnect.
+          ws.close();
+          return;
+        }
+
+        ws.send(JSON.stringify({ type: "ping", ts: Date.now() }));
+      }, PING_INTERVAL_MS);
+    },
+    [stopHeartbeat],
+  );
+
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimerRef.current !== null) {
+      window.clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
     }
   }, []);
 
@@ -153,9 +218,19 @@ export function useAudioRoom() {
         return;
       }
 
+      manualCloseRef.current = false;
+      clearReconnectTimer();
+      stopHeartbeat();
+
       wsAudioRef.current?.close();
 
       if (wsRef.current) {
+        // Detach handlers so closing the old socket does not trigger
+        // the reconnect logic in its onclose.
+        wsRef.current.onopen = null;
+        wsRef.current.onmessage = null;
+        wsRef.current.onclose = null;
+        wsRef.current.onerror = null;
         wsRef.current.close();
       }
 
@@ -197,9 +272,13 @@ export function useAudioRoom() {
 
         ws.onopen = () => {
           console.log("[AudioRoom] WebSocket connected");
+          startHeartbeat(ws);
         };
 
         ws.onmessage = async (event) => {
+          // Any inbound frame proves the connection is alive.
+          lastPongRef.current = Date.now();
+
           if (typeof event.data === "string") {
             try {
               const data = JSON.parse(event.data) as Record<string, unknown>;
@@ -238,11 +317,90 @@ export function useAudioRoom() {
 
                   saveActiveRoomId(roomId);
 
+                  reconnectAttemptsRef.current = 0;
+
+                  // After a reconnect the server keeps the pre-disconnect
+                  // mute flag; re-sync our actual state.
+                  sendWs({ type: "mute", muted: wsAudio.isMuted });
+
                   console.log("[AudioRoom] Room state received", {
                     slot,
                     participants: participants.length,
                   });
 
+                  break;
+                }
+
+                case "pong": {
+                  break;
+                }
+
+                case "peer-reconnected": {
+                  const peerSlot =
+                    typeof data.userSlot === "string" ? data.userSlot : null;
+
+                  if (!peerSlot) {
+                    return;
+                  }
+
+                  const peerName =
+                    typeof data.userName === "string"
+                      ? data.userName
+                      : "Participant";
+
+                  const peerMuted =
+                    typeof data.muted === "boolean" ? data.muted : false;
+
+                  // The peer restarts its recorder from scratch, so our
+                  // playback pipeline must start from a fresh WebM header too.
+                  const audioElement = await wsAudio.resetPlayback();
+
+                  update({ remoteAudioElement: audioElement });
+
+                  wsAudio.restartMediaRecorder();
+
+                  setState((previousState) => {
+                    const participantExists = previousState.participants.some(
+                      (participant) => participant.slot === peerSlot,
+                    );
+
+                    const nextParticipants = participantExists
+                      ? previousState.participants.map((participant) =>
+                          participant.slot === peerSlot
+                            ? { ...participant, name: peerName, muted: peerMuted }
+                            : participant,
+                        )
+                      : [
+                          ...previousState.participants,
+                          { slot: peerSlot, name: peerName, muted: peerMuted },
+                        ];
+
+                    return {
+                      ...previousState,
+                      participants: nextParticipants,
+                      status: "active",
+                    };
+                  });
+
+                  console.log("[AudioRoom] Peer reconnected:", peerName);
+                  break;
+                }
+
+                case "audio-restart-required": {
+                  const audioElement = await wsAudio.resetPlayback();
+
+                  update({ remoteAudioElement: audioElement });
+
+                  wsAudio.restartMediaRecorder();
+
+                  console.log(
+                    "[AudioRoom] Audio pipelines restarted after reconnect",
+                  );
+
+                  break;
+                }
+
+                case "roles-updated": {
                   break;
                 }
 
@@ -406,12 +564,56 @@ export function useAudioRoom() {
             reason: event.reason,
           });
 
+          stopHeartbeat();
+
           const roomWasClosedByBackend =
             event.code === 4000 || event.reason === "Room closed";
 
           const roomWasRejected =
             event.code === 4004 ||
             event.reason.toLowerCase().includes("room not found");
+
+          const authFailed = event.code === 4001;
+
+          // Unexpected drop (proxy idle timeout, network blip, heartbeat
+          // kill): reconnect. The server keeps our slot for a grace period
+          // and restores the session on reconnect.
+          const shouldReconnect =
+            !manualCloseRef.current &&
+            !roomWasClosedByBackend &&
+            !roomWasRejected &&
+            !authFailed;
+
+          if (shouldReconnect) {
+            if (reconnectAttemptsRef.current < MAX_RECONNECT_ATTEMPTS) {
+              reconnectAttemptsRef.current += 1;
+
+              const delay =
+                RECONNECT_BASE_DELAY_MS *
+                2 ** (reconnectAttemptsRef.current - 1);
+
+              console.log("[AudioRoom] Scheduling reconnect", {
+                attempt: reconnectAttemptsRef.current,
+                delay,
+              });
+
+              update({ status: "connecting" });
+
+              reconnectTimerRef.current = window.setTimeout(() => {
+                reconnectTimerRef.current = null;
+                connectToRoomRef.current?.(roomId);
+              }, delay);
+
+              return;
+            }
+
+            update({
+              error: "Connection lost. Please rejoin the room.",
+              status: "ended",
+            });
+
+            return;
+          }
 
           if (roomWasClosedByBackend || roomWasRejected) {
             removeActiveRoomId();
@@ -431,8 +633,8 @@ export function useAudioRoom() {
         };
 
         ws.onerror = (event) => {
+          // onclose always follows and decides whether to reconnect.
           console.warn("[AudioRoom] WebSocket error", event);
-          update({ error: "Connection error", status: "idle" });
         };
       } catch (error) {
         const message =
@@ -442,8 +644,12 @@ export function useAudioRoom() {
         wsAudio.close();
       }
     },
-    [update],
+    [clearReconnectTimer, sendWs, startHeartbeat, stopHeartbeat, update],
   );
+
+  useEffect(() => {
+    connectToRoomRef.current = connectToRoom;
+  }, [connectToRoom]);
 
   // ------------------------------------------------------------------
   // Create room through new backend flow
@@ -453,7 +659,7 @@ export function useAudioRoom() {
     update({ status: "creating", error: null });
 
     try {
-      const match = await findMatch();
+      const match = await createRoomApi();
       const roomId = match.room_id;
 
       roomIdRef.current = roomId;
@@ -537,6 +743,10 @@ export function useAudioRoom() {
     const currentRoomId = roomIdRef.current;
     const currentUserSlot = userSlotRef.current;
 
+    manualCloseRef.current = true;
+    clearReconnectTimer();
+    stopHeartbeat();
+
     wsAudioRef.current?.close();
     wsAudioRef.current = null;
 
@@ -566,7 +776,7 @@ export function useAudioRoom() {
       error: null,
       remoteAudioElement: null,
     });
-  }, [update]);
+  }, [clearReconnectTimer, stopHeartbeat, update]);
 
   // ------------------------------------------------------------------
   // Cleanup on unmount
@@ -574,6 +784,18 @@ export function useAudioRoom() {
 
   useEffect(() => {
     return () => {
+      manualCloseRef.current = true;
+
+      if (reconnectTimerRef.current !== null) {
+        window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+
+      if (heartbeatIntervalRef.current !== null) {
+        window.clearInterval(heartbeatIntervalRef.current);
+        heartbeatIntervalRef.current = null;
+      }
+
       wsAudioRef.current?.close();
 
       if (wsRef.current) {

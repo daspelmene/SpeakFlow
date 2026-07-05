@@ -20,3 +20,4 @@ class LiveCorrectionNote(Base):
     note_text: Mapped[str]
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+

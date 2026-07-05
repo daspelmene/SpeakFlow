@@ -32,7 +32,9 @@ deploy-backend:
   script:
     - |
       ssh "$SSH_USER@$SSH_HOST" <<EOF
-      kubectl rollout restart deployment backend -n default
+      kubectl set image deployment/backend \
+        backend="$DOCKERHUB_USER/speakflow-backend:$CI_COMMIT_SHA" \
+        -n default
       EOF
 
 
@@ -43,9 +45,14 @@ deploy-frontend:
   rules:
     - changes:
       - app/frontend/**/*
+      - app/frontend/Dockerfile
 
   script:
     - |
       ssh "$SSH_USER@$SSH_HOST" <<EOF
-      kubectl rollout restart deployment frontend -n default
+      kubectl set image deployment/frontend \
+        frontend="$DOCKERHUB_USER/speakflow-frontend:$CI_COMMIT_SHA" \
+        -n default
+
+      kubectl rollout status deployment/frontend -n default
       EOF
