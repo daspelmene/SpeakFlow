@@ -6,12 +6,13 @@ build-backend:
     - changes:
       - app/backend/**/*
       - app/backend/Dockerfile
+      - app/tests/**/*
 
   script:
     - echo "Building backend..."
-    - docker build -f app/backend/Dockerfile -t "$DOCKERHUB_USER/speakflow-backend:latest" .
+    - docker build -f app/backend/Dockerfile -t "$DOCKERHUB_USER/speakflow-backend:${CI_COMMIT_SHA:-latest}" .
     - echo "Pushing the image to Docker Hub..."
-    - docker push "$DOCKERHUB_USER/speakflow-backend:latest"
+    - docker push "$DOCKERHUB_USER/speakflow-backend:${CI_COMMIT_SHA:-latest}"
 
 
 build-frontend:
@@ -21,12 +22,13 @@ build-frontend:
   rules:
     - changes:
       - app/frontend/**/*
+      - app/frontend/Dockerfile
 
   script:
     - echo "Building frontend..."
-    - docker build -t "$DOCKERHUB_USER/speakflow-frontend:latest" app/frontend/
+    - docker build -t "$DOCKERHUB_USER/speakflow-frontend:${CI_COMMIT_SHA:-latest}" app/frontend/
     - echo "Pushing the image to Docker Hub..."
-    - docker push "$DOCKERHUB_USER/speakflow-frontend:latest"
+    - docker push "$DOCKERHUB_USER/speakflow-frontend:${CI_COMMIT_SHA:-latest}"
 
 
 build-tests:
@@ -35,10 +37,12 @@ build-tests:
 
   rules:
     - changes:
+      - app/backend/**/*
+      - app/backend/Dockerfile
       - app/tests/**/*
 
   script:
     - echo "Building tests..."
-    - docker build -f app/tests/Dockerfile -t "$DOCKERHUB_USER/speakflow-tests:latest" .
+    - docker build -f app/tests/Dockerfile -t "$DOCKERHUB_USER/speakflow-tests:${CI_COMMIT_SHA:-latest}" .
     - echo "Pushing the image to Docker Hub..."
-    - docker push "$DOCKERHUB_USER/speakflow-tests:latest"
+    - docker push "$DOCKERHUB_USER/speakflow-tests:${CI_COMMIT_SHA:-latest}"

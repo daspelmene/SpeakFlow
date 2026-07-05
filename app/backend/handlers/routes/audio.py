@@ -18,6 +18,8 @@ from schemas.room import (
     RoomJoinRequest,
     RoomJoinResponse,
     MessageResponse,
+    ActiveRoomResponse,
+    UserProfileSummary,
 )
 from utils.audio_ws import ws_audio_service
 from utils.jwt import get_current_user, decode_token
@@ -29,13 +31,60 @@ logger = logging.getLogger("audio-routes")
 router = APIRouter(prefix="/audio", tags=["Audio"])
 
 
+def _build_user_profile(user: User) -> UserProfileSummary:
+    """Build a profile summary from a User model."""
+    return UserProfileSummary(
+        user_id=user.id,
+        fullname=user.fullname,
+        native_language=user.native_language,
+        target_language=user.target_language,
+        interests=user.interests or [],
+        bio=user.bio,
+    )
+
+
 # ------------------------------------------------------------------
 # REST endpoints - Room matching & management
 # ------------------------------------------------------------------
 
 
-@router.post("/find-match", response_model=RoomCreateResponse)
-async def find_match(
+@router.get("/active-room", response_model=ActiveRoomResponse | None)
+async def get_active_room(
+    user: User = Depends(get_current_user),
+    db: Database = Depends(Database.get_db),
+):
+    """Get the current active room for the user, if any."""
+    logger.info(f"User {user.id} ({user.fullname}) checking active room")
+
+    room = await db.rooms.get_active_room_for_user(user.id)
+    if room is None:
+        logger.info(f"No active room for user {user.id}")
+        return None
+
+    room_id_str = str(room.room_id)
+    logger.info(f"Found active room {room_id_str} for user {user.id}")
+
+    # Determine user slot and role
+    if room.user_creator_id == user.id:
+        user_slot = "user1"
+    else:
+        user_slot = "user2"
+
+    # Get role from WebSocket service if available, otherwise default
+    role = "helper" if user_slot == "user1" else "learner"
+    if room_id_str in ws_audio_service.rooms:
+        ws_room = ws_audio_service.rooms[room_id_str]
+        role = ws_room.get("roles", {}).get(user_slot, role)
+
+    return ActiveRoomResponse(
+        room_id=room.room_id,
+        user_slot=user_slot,
+        role=role,
+    )
+
+
+@router.post("/create-room", response_model=RoomCreateResponse)
+async def create_room(
     user: User = Depends(get_current_user),
     db: Database = Depends(Database.get_db),
 ):
@@ -123,7 +172,7 @@ async def get_pending_invitations(
 
     invitations = []
     for room in rooms:
-        # Get creator info
+        # Get creator info with full profile
         creator = await db.users.get_user_by_id(room.user_creator_id)
         if creator:
             invitations.append(
@@ -131,6 +180,7 @@ async def get_pending_invitations(
                     room_id=room.room_id,
                     creator_user_id=creator.id,
                     creator_user_name=creator.fullname,
+                    creator_profile=_build_user_profile(creator),
                 )
             )
             logger.debug(
@@ -172,7 +222,7 @@ async def join_room(
     )
 
     # Ensure room is registered in WebSocket service
-    # (should already be from find-match, but let's be safe)
+    # (should already be from create-room, but let's be safe)
     room_str = str(room.room_id)
     if room_str not in ws_audio_service.rooms:
         logger.info(f"Room {room_str} not in WebSocket service, registering now")
@@ -184,9 +234,15 @@ async def join_room(
             user.fullname,
         )
 
+    # Get role for invited user (default: learner)
+    role = "learner"
+    if room_str in ws_audio_service.rooms:
+        role = ws_audio_service.rooms[room_str].get("roles", {}).get("user2", "learner")
+
     return RoomJoinResponse(
         room_id=room.room_id,
         user_slot="user2",
+        role=role,
     )
 
 
@@ -297,6 +353,10 @@ async def audio_websocket(
       2. Server authenticates and validates room membership
       3. Client sends: signaling (text), audio (binary)
       4. Server forwards audio binary frames to other participant
+
+    Supported signaling messages:
+      - { type: "mute", muted: true/false }
+      - { type: "switch-roles" }
     """
     logger.info(f"WebSocket connection attempt for room {room_id}")
 
@@ -340,27 +400,36 @@ async def audio_websocket(
 
     user_slot = result["userSlot"]
     user_name = result["userName"]
+    user_role = result.get("role", "learner")
+    is_reconnect = result.get("status") == "reconnected"
+
     logger.info(
         f"WebSocket connected: user={user_name} (id={user_id}) "
-        f"as {user_slot} in room {room_id}"
+        f"as {user_slot} ({user_role}) in room {room_id} "
+        f"(reconnect={is_reconnect})"
     )
 
-    # Send room state to the newly connected user
-    room_info = ws_audio_service.get_room_info(room_id)
-    participants = room_info.get("participants", []) if room_info else []
-    await websocket.send_json(
-        {
-            "type": "room-state",
-            "roomId": room_id,
-            "userSlot": user_slot,
-            "userName": user_name,
-            "participants": participants,
-        }
-    )
-    logger.info(
-        f"room-state sent to {user_name}: slot={user_slot}, "
-        f"participants={len(participants)}"
-    )
+    # For new connections (not reconnect), send room-state
+    # (reconnect already sends it in ws_connect)
+    if not is_reconnect:
+        room_info = ws_audio_service.get_room_info(room_id)
+        participants = room_info.get("participants", []) if room_info else []
+        roles = room_info.get("roles", {}) if room_info else {}
+        await websocket.send_json(
+            {
+                "type": "room-state",
+                "roomId": room_id,
+                "userSlot": user_slot,
+                "userName": user_name,
+                "role": user_role,
+                "roles": roles,
+                "participants": participants,
+            }
+        )
+        logger.info(
+            f"room-state sent to {user_name}: slot={user_slot}, "
+            f"role={user_role}, participants={len(participants)}"
+        )
 
     # Message loop — handle BOTH text and binary frames
     try:
@@ -410,4 +479,5 @@ async def audio_websocket(
         logger.info(
             f"Cleaning up WebSocket for {user_name} ({user_slot}) in room {room_id}"
         )
-        await ws_audio_service.disconnect_user(room_id, user_slot)
+        await ws_audio_service.disconnect_user(room_id, user_slot, websocket)
+        

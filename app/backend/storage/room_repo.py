@@ -46,7 +46,7 @@ class RoomRepository:
         query = select(Room).where(
             and_(
                 Room.invited_user_id == user_id,
-                Room.is_invited_accepted == False,
+                ~Room.is_invited_accepted,
             )
         )
         result = await self.session.execute(query)
@@ -63,7 +63,7 @@ class RoomRepository:
                     Room.user_creator_id == user_id,
                     and_(
                         Room.invited_user_id == user_id,
-                        Room.is_invited_accepted == True,
+                        Room.is_invited_accepted,
                     ),
                 )
             )

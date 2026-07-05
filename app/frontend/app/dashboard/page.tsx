@@ -8,18 +8,15 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import {
+  createRoom,
   declineInvitation,
-  findMatch,
+  getActiveRoom,
   getPendingInvitations,
   joinRoom,
   type RoomInvitation,
 } from "@/lib/roomApi";
 import { getAccessToken } from "@/lib/auth";
-import {
-  getActiveRoomId,
-  removeActiveRoomId,
-  saveActiveRoomId,
-} from "@/lib/activeRoomStorage";
+import { removeActiveRoomId, saveActiveRoomId } from "@/lib/activeRoomStorage";
 import { saveSessionPartnerUserId } from "@/lib/sessionPartnerStorage";
 import {
   getLiveCorrectionNotes,
@@ -62,6 +59,28 @@ function InvitationCard({
           <p className="mt-2 text-base leading-7 text-slate-600">
             Join this room to start an audio-only guided speaking session.
           </p>
+
+          {invitation.creator_profile && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {invitation.creator_profile.native_language && (
+                <Badge variant="neutral">
+                  Speaks {invitation.creator_profile.native_language}
+                </Badge>
+              )}
+
+              {invitation.creator_profile.target_language && (
+                <Badge variant="neutral">
+                  Learning {invitation.creator_profile.target_language}
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {invitation.creator_profile?.bio && (
+            <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
+              {invitation.creator_profile.bio}
+            </p>
+          )}
 
           <div className="mt-4 rounded-2xl bg-white px-4 py-3 ring-1 ring-amber-100">
             <p className="text-xs font-black uppercase tracking-wide text-slate-400">
@@ -210,8 +229,6 @@ export default function DashboardPage() {
   const router = useRouter();
 
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
-  const [hasBackendActiveRoomConflict, setHasBackendActiveRoomConflict] =
-    useState(false);
 
   const [pendingInvitations, setPendingInvitations] = useState<
     RoomInvitation[]
@@ -252,6 +269,22 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const loadActiveRoom = useCallback(async () => {
+    try {
+      const room = await getActiveRoom();
+
+      if (room) {
+        saveActiveRoomId(room.room_id);
+        setActiveRoomId(room.room_id);
+      } else {
+        removeActiveRoomId();
+        setActiveRoomId(null);
+      }
+    } catch {
+      // Keep whatever was previously known; the backend may be briefly unavailable.
+    }
+  }, []);
+
   const loadPreviousActivity = useCallback(async () => {
     setIsLoadingHistory(true);
 
@@ -280,7 +313,7 @@ export default function DashboardPage() {
     }
 
     const initialLoadTimeoutId = window.setTimeout(() => {
-      setActiveRoomId(getActiveRoomId());
+      void loadActiveRoom();
       void loadPendingInvitations();
       void loadPreviousActivity();
     }, 0);
@@ -293,15 +326,14 @@ export default function DashboardPage() {
       window.clearTimeout(initialLoadTimeoutId);
       window.clearInterval(intervalId);
     };
-  }, [loadPendingInvitations, loadPreviousActivity, router]);
+  }, [loadActiveRoom, loadPendingInvitations, loadPreviousActivity, router]);
 
   async function handleFindMatch() {
     setDashboardError(null);
-    setHasBackendActiveRoomConflict(false);
     setIsFindingMatch(true);
 
     try {
-      const match = await findMatch();
+      const match = await createRoom();
 
       saveSessionPartnerUserId(match.room_id, match.invited_user_id);
       saveActiveRoomId(match.room_id);
@@ -316,8 +348,8 @@ export default function DashboardPage() {
 
       setDashboardError(message);
 
-      if (isActiveRoomConflict(message) && !getActiveRoomId()) {
-        setHasBackendActiveRoomConflict(true);
+      if (isActiveRoomConflict(message)) {
+        void loadActiveRoom();
       }
     } finally {
       setIsFindingMatch(false);
@@ -326,7 +358,6 @@ export default function DashboardPage() {
 
   async function handleJoinInvitation(invitation: RoomInvitation) {
     setDashboardError(null);
-    setHasBackendActiveRoomConflict(false);
     setJoiningRoomId(invitation.room_id);
 
     try {
@@ -385,7 +416,6 @@ export default function DashboardPage() {
   function handleForgetActiveRoom() {
     removeActiveRoomId();
     setActiveRoomId(null);
-    setHasBackendActiveRoomConflict(false);
   }
 
   return (
@@ -409,24 +439,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {hasBackendActiveRoomConflict && !activeRoomId && (
-        <section className="mb-7">
-          <Card className="border-amber-100 bg-amber-50 p-6">
-            <Badge variant="warning">Active room conflict</Badge>
-
-            <h2 className="mt-4 text-2xl font-black text-slate-950">
-              Backend says you are already in an active room
-            </h2>
-
-            <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">
-              The backend reports that this user already has an active room, but
-              the frontend cannot recover the room ID yet. Reliable recovery
-              requires a backend endpoint such as GET /api/v1/audio/active-room.
-            </p>
-          </Card>
-        </section>
-      )}
-
       {activeRoomId && (
         <section className="mb-7">
           <Card className="border-indigo-100 bg-indigo-50 p-6">
@@ -439,9 +451,9 @@ export default function DashboardPage() {
                 </h2>
 
                 <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">
-                  You have a locally remembered active room. Use this button if
-                  you opened Profile or another page and want to return to the
-                  session.
+                  The backend reports that you are already in an active room.
+                  Use this button if you opened Profile or another page and
+                  want to return to the session.
                 </p>
 
                 <p className="mt-3 break-all font-mono text-sm font-black text-indigo-800">

@@ -13,8 +13,6 @@ import Textarea from "@/components/ui/Textarea";
 import { getCurrentUser, updateCurrentUser } from "@/lib/api";
 import { getAccessToken } from "@/lib/auth";
 
-const MOCK_PROFILE_KEY = "speakflow_mock_profile_setup";
-
 const languageOptions = [
   "English",
   "Russian",
@@ -103,34 +101,13 @@ export default function ProfileSetupPage() {
   const [fieldErrors, setFieldErrors] = useState<ProfileSetupErrors>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isMockMode, setIsMockMode] = useState(false);
 
   useEffect(() => {
     async function loadProfile() {
       const token = getAccessToken();
 
       if (!token) {
-        setIsMockMode(true);
-
-        const savedMockProfile = localStorage.getItem(MOCK_PROFILE_KEY);
-
-        if (savedMockProfile) {
-          const parsedProfile = JSON.parse(savedMockProfile);
-
-          setFullname(parsedProfile.fullname || "Demo User");
-          setNativeLanguage(parsedProfile.native_language || "");
-          setTargetLanguage(parsedProfile.target_language || "");
-          setBio(parsedProfile.bio || "");
-          setInterests(parsedProfile.interests || []);
-        } else {
-          setFullname("Demo User");
-          setNativeLanguage("");
-          setTargetLanguage("");
-          setBio("");
-          setInterests([]);
-        }
-
-        setIsLoading(false);
+        router.replace("/login");
         return;
       }
 
@@ -155,7 +132,7 @@ export default function ProfileSetupPage() {
     }
 
     loadProfile();
-  }, []);
+  }, [router]);
 
   function clearFieldError(field: keyof ProfileSetupErrors) {
     setFieldErrors((currentErrors) => ({
@@ -240,24 +217,6 @@ export default function ProfileSetupPage() {
     try {
       setIsSubmitting(true);
 
-      const token = getAccessToken();
-
-      if (!token) {
-        localStorage.setItem(
-          MOCK_PROFILE_KEY,
-          JSON.stringify({
-            fullname,
-            native_language: nativeLanguage,
-            target_language: targetLanguage,
-            interests,
-            bio: bio.trim(),
-          }),
-        );
-
-        router.push("/dashboard");
-        return;
-      }
-
       await updateCurrentUser({
         native_language: nativeLanguage,
         target_language: targetLanguage,
@@ -306,15 +265,6 @@ export default function ProfileSetupPage() {
             Add your languages, interests, and a short bio so other learners can
             understand what you want to practice.
           </p>
-
-          {isMockMode && (
-            <div className="mt-4">
-              <FormAlert
-                variant="warning"
-                message="Demo mode: backend is not connected yet, so profile data will be saved locally."
-              />
-            </div>
-          )}
         </div>
 
         <Card className="p-7">
