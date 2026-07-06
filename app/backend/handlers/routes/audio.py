@@ -15,6 +15,7 @@ from schemas.room import (
     RoomCreateResponse,
     RoomInvitation,
     RoomInvitationsResponse,
+    RoomInviteByEmailRequest,
     RoomJoinRequest,
     RoomJoinResponse,
     MessageResponse,
@@ -140,6 +141,81 @@ async def create_room(
 
     logger.info(
         f"Room {room.room_id} created in database: "
+        f"creator={user.id} ({user.fullname}), "
+        f"invited={invited_user.id} ({invited_user.fullname})"
+    )
+
+    # Register room in WebSocket service
+    ws_audio_service.register_room(
+        str(room.room_id),
+        user.fullname,
+        invited_user.fullname,
+    )
+    logger.info(f"Room {room.room_id} registered in WebSocket service")
+
+    return RoomCreateResponse(
+        room_id=room.room_id,
+        invited_user_id=invited_user.id,
+        invited_user_name=invited_user.fullname,
+    )
+
+
+@router.post("/invite-by-email", response_model=RoomCreateResponse)
+async def invite_by_email(
+    data: RoomInviteByEmailRequest,
+    user: User = Depends(get_current_user),
+    db: Database = Depends(Database.get_db),
+):
+    """Create a room and invite a specific user by email."""
+    email = data.email.strip()
+    logger.info(f"User {user.id} ({user.fullname}) inviting {email} by email")
+
+    # Check if the inviting user is already in a room
+    existing_room = await db.rooms.get_active_room_for_user(user.id)
+    if existing_room:
+        logger.warning(f"User {user.id} already in room {existing_room.room_id}")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You are already in an active room",
+        )
+
+    # Look up the invited user by email (case-insensitive, so a user who
+    # registered as "Bob@X.com" can still be invited as "bob@x.com")
+    invited_user = await db.users.get_user_by_email_insensitive(email)
+    if invited_user is None:
+        logger.warning(f"No user found with email {email}")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No user found with this email",
+        )
+
+    if invited_user.id == user.id:
+        logger.warning(f"User {user.id} tried to invite themselves")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="You cannot invite yourself",
+        )
+
+    # Make sure the invited user is not already busy in another room
+    invited_in_room = await db.rooms.is_user_in_any_room(invited_user.id)
+    if invited_in_room:
+        logger.warning(
+            f"Invited user {invited_user.id} ({invited_user.fullname}) "
+            f"is already in a room"
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This user is already in an active room",
+        )
+
+    # Create room in database
+    room = await db.rooms.create_room(
+        user_creator_id=user.id,
+        invited_user_id=invited_user.id,
+    )
+
+    logger.info(
+        f"Room {room.room_id} created by email invite: "
         f"creator={user.id} ({user.fullname}), "
         f"invited={invited_user.id} ({invited_user.fullname})"
     )

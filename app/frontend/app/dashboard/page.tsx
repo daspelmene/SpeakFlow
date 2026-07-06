@@ -12,9 +12,11 @@ import {
   declineInvitation,
   getActiveRoom,
   getPendingInvitations,
+  inviteByEmail,
   joinRoom,
   type RoomInvitation,
 } from "@/lib/roomApi";
+import Input from "@/components/ui/Input";
 import { getAccessToken } from "@/lib/auth";
 import { removeActiveRoomId, saveActiveRoomId } from "@/lib/activeRoomStorage";
 import { saveSessionPartnerUserId } from "@/lib/sessionPartnerStorage";
@@ -239,6 +241,9 @@ export default function DashboardPage() {
   const [isLoadingInvitations, setIsLoadingInvitations] = useState(true);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isFindingMatch, setIsFindingMatch] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [isInvitingByEmail, setIsInvitingByEmail] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
   const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
   const [decliningRoomId, setDecliningRoomId] = useState<string | null>(null);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
@@ -353,6 +358,41 @@ export default function DashboardPage() {
       }
     } finally {
       setIsFindingMatch(false);
+    }
+  }
+
+  async function handleInviteByEmail() {
+    const email = inviteEmail.trim();
+
+    setInviteError(null);
+    setDashboardError(null);
+
+    if (!email) {
+      setInviteError("Enter the email of the user you want to invite.");
+      return;
+    }
+
+    setIsInvitingByEmail(true);
+
+    try {
+      const match = await inviteByEmail(email);
+
+      saveSessionPartnerUserId(match.room_id, match.invited_user_id);
+      saveActiveRoomId(match.room_id);
+      setActiveRoomId(match.room_id);
+
+      router.push(`/session/${match.room_id}`);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to invite this user";
+
+      setInviteError(message);
+
+      if (isActiveRoomConflict(message)) {
+        void loadActiveRoom();
+      }
+    } finally {
+      setIsInvitingByEmail(false);
     }
   }
 
@@ -503,6 +543,52 @@ export default function DashboardPage() {
             >
               {isFindingMatch ? "Creating room..." : "Find partner"}
             </Button>
+          </div>
+        </Card>
+      </section>
+
+      <section className="mb-7">
+        <Card className="p-6">
+          <div className="flex flex-col gap-5">
+            <div>
+              <Badge variant="info">Invite by email</Badge>
+
+              <h2 className="mt-4 text-2xl font-black text-slate-950">
+                Invite a specific user
+              </h2>
+
+              <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">
+                Already know who you want to practice with? Enter their email to
+                create a room and send them an invitation directly.
+              </p>
+            </div>
+
+            <form
+              className="flex flex-col gap-3 sm:flex-row sm:items-start"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleInviteByEmail();
+              }}
+            >
+              <div className="w-full sm:max-w-md">
+                <Input
+                  type="email"
+                  placeholder="partner@example.com"
+                  value={inviteEmail}
+                  onChange={(event) => setInviteEmail(event.target.value)}
+                  disabled={isInvitingByEmail}
+                  error={inviteError ?? undefined}
+                  aria-label="Email of the user to invite"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isInvitingByEmail || inviteEmail.trim().length === 0}
+              >
+                {isInvitingByEmail ? "Inviting..." : "Send invitation"}
+              </Button>
+            </form>
           </div>
         </Card>
       </section>

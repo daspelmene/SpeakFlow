@@ -49,6 +49,16 @@ export function createRoom() {
   });
 }
 
+export function inviteByEmail(email: string) {
+  return request<CreateRoomResponse>("/api/v1/audio/invite-by-email", {
+    method: "POST",
+    headers: getAuthHeaders(),
+    body: JSON.stringify({
+      email,
+    }),
+  });
+}
+
 export function getActiveRoom() {
   return request<ActiveRoomResponse | null>("/api/v1/audio/active-room", {
     method: "GET",

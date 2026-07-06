@@ -481,3 +481,133 @@ async def test_websocket_stale_socket_close_keeps_reconnected_session(
     await ws_new.close()
     await user1.aclose()
     await user2.aclose()
+
+
+async def test_invite_by_email_success(client: AsyncClient):
+    """Inviting an existing user by email creates a room and an invitation."""
+    user1, user2 = await setup_matching_users(client)
+
+    resp = await user1.post(
+        "/audio/invite-by-email", json={"email": "user2@example.com"}
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "room_id" in data
+    assert data["invited_user_name"] == "User Two"
+
+    # The invited user should now see a pending invitation
+    resp = await user2.get("/audio/pending-invitations")
+    assert resp.status_code == 200
+    invitations = resp.json()["invitations"]
+    assert any(inv["room_id"] == data["room_id"] for inv in invitations)
+
+    await user1.aclose()
+    await user2.aclose()
+
+
+async def test_invite_by_email_trims_whitespace(client: AsyncClient):
+    """Surrounding whitespace in the email is ignored when looking up the user."""
+    user1, user2 = await setup_matching_users(client)
+
+    resp = await user1.post(
+        "/audio/invite-by-email", json={"email": "  user2@example.com  "}
+    )
+    assert resp.status_code == 200
+
+    await user1.aclose()
+    await user2.aclose()
+
+
+async def test_invite_by_email_case_insensitive(client: AsyncClient):
+    """The invited email is matched ignoring case."""
+    user1, user2 = await setup_matching_users(client)
+
+    resp = await user1.post(
+        "/audio/invite-by-email", json={"email": "USER2@EXAMPLE.COM"}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["invited_user_name"] == "User Two"
+
+    await user1.aclose()
+    await user2.aclose()
+
+
+async def test_invite_by_email_user_not_found(client: AsyncClient):
+    """Inviting an email with no matching account returns 404."""
+    user1, user2 = await setup_matching_users(client)
+
+    resp = await user1.post(
+        "/audio/invite-by-email", json={"email": "nobody@example.com"}
+    )
+    assert resp.status_code == 404
+    assert "No user found" in resp.json()["detail"]
+
+    await user1.aclose()
+    await user2.aclose()
+
+
+async def test_invite_by_email_self(client: AsyncClient):
+    """A user cannot invite themselves by email."""
+    user1, user2 = await setup_matching_users(client)
+
+    resp = await user1.post(
+        "/audio/invite-by-email", json={"email": "user1@example.com"}
+    )
+    assert resp.status_code == 400
+    assert "yourself" in resp.json()["detail"].lower()
+
+    await user1.aclose()
+    await user2.aclose()
+
+
+async def test_invite_by_email_already_in_room(client: AsyncClient):
+    """A user already in a room cannot invite another user by email."""
+    user1, user2 = await setup_matching_users(client)
+
+    # user1 first creates a room via matchmaking
+    resp = await user1.post("/audio/create-room")
+    assert resp.status_code == 200
+
+    # Now inviting by email should be rejected
+    resp = await user1.post(
+        "/audio/invite-by-email", json={"email": "user2@example.com"}
+    )
+    assert resp.status_code == 409
+    assert "already in an active room" in resp.json()["detail"]
+
+    await user1.aclose()
+    await user2.aclose()
+
+
+async def test_invite_by_email_target_already_in_room(client: AsyncClient):
+    """Cannot invite a user who is already busy in another room."""
+    # Three users: user1 & user2 match; user3 will be pulled into a room first.
+    user1, user2 = await setup_matching_users(client)
+
+    token3, _ = await register_user(
+        client, "user3@example.com", "pass789", "User Three"
+    )
+    user3 = AsyncClient(base_url=client.base_url, timeout=10.0)
+    user3.headers["Authorization"] = f"Bearer {token3}"
+    user3.access_token = token3
+    await user3.patch("/users/me", json={
+        "native_language": "English",
+        "target_language": "Spanish",
+    })
+
+    # user3 invites user2, so user2 is now busy
+    resp = await user3.post(
+        "/audio/invite-by-email", json={"email": "user2@example.com"}
+    )
+    assert resp.status_code == 200
+
+    # user1 now tries to invite the busy user2
+    resp = await user1.post(
+        "/audio/invite-by-email", json={"email": "user2@example.com"}
+    )
+    assert resp.status_code == 409
+    assert "already in an active room" in resp.json()["detail"]
+
+    await user1.aclose()
+    await user2.aclose()
+    await user3.aclose()

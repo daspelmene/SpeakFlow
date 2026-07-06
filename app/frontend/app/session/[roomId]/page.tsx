@@ -23,14 +23,15 @@ import {
 } from "@/lib/sessionTemplateApi";
 import type { Participant, RoomStatus } from "@/hooks/useAudioRoom";
 
+type SessionRole = "helper" | "learner" | "unknown";
+
 type AudioRoomStateSnapshot = {
   status: RoomStatus;
   roomId: string | null;
   userSlot: string | null;
+  role: "helper" | "learner" | null;
   participants: Participant[];
 };
-
-type SessionRole = "helper" | "learner" | "unknown";
 
 function getRole(userSlot: string | null): SessionRole {
   if (!userSlot) {
@@ -94,6 +95,9 @@ export default function SessionRoomPage() {
 
   const [audioStatus, setAudioStatus] = useState<RoomStatus>("idle");
   const [currentUserSlot, setCurrentUserSlot] = useState<string | null>(null);
+  const [serverRole, setServerRole] = useState<"helper" | "learner" | null>(
+    null,
+  );
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [noteText, setNoteText] = useState("");
   const [feedbackText, setFeedbackText] = useState("");
@@ -158,9 +162,11 @@ export default function SessionRoomPage() {
     return partner?.userId ?? partnerUserIdFromStorage;
   }, [participants, currentUserSlot, partnerUserIdFromStorage]);
 
+  // Prefer the role the backend reports (it rotates over time); fall back to
+  // the slot-derived default before the first room-state arrives.
   const currentRole = useMemo(
-    () => getRole(currentUserSlot),
-    [currentUserSlot],
+    () => serverRole ?? getRole(currentUserSlot),
+    [serverRole, currentUserSlot],
   );
 
   const isSessionActive = audioStatus === "active";
@@ -170,6 +176,7 @@ export default function SessionRoomPage() {
   const handleRoomStateChange = useCallback((state: AudioRoomStateSnapshot) => {
     setAudioStatus(state.status);
     setCurrentUserSlot(state.userSlot);
+    setServerRole(state.role);
     setParticipants(state.participants);
   }, []);
 
@@ -386,9 +393,10 @@ export default function SessionRoomPage() {
 
             <div className="mt-4 rounded-2xl bg-slate-50 p-4">
               <p className="text-sm font-bold leading-6 text-slate-500">
-                Role switching is intentionally disabled for now. It should be
-                synchronized by the backend through a WebSocket event to prevent
-                both users from becoming helpers or learners at the same time.
+                Roles rotate automatically every 90 seconds so both partners
+                take turns as helper and learner. The switch is synchronized by
+                the backend over WebSocket, so you and your partner always hold
+                opposite roles.
               </p>
             </div>
           </Card>

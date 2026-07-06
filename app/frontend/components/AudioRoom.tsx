@@ -6,6 +6,7 @@ import {
   useAudioRoom,
   type Participant,
   type RoomStatus,
+  type SessionRole,
 } from "@/hooks/useAudioRoom";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -14,6 +15,7 @@ type AudioRoomStateSnapshot = {
   status: RoomStatus;
   roomId: string | null;
   userSlot: string | null;
+  role: SessionRole | null;
   participants: Participant[];
 };
 
@@ -60,6 +62,7 @@ export default function AudioRoom({
     status,
     roomId,
     userSlot,
+    role,
     participants,
     isMuted,
     error,
@@ -85,9 +88,10 @@ export default function AudioRoom({
       status,
       roomId,
       userSlot,
+      role,
       participants,
     });
-  }, [status, roomId, userSlot, participants, onRoomStateChange]);
+  }, [status, roomId, userSlot, role, participants, onRoomStateChange]);
 
   useEffect(() => {
     if (status === "ended") {
