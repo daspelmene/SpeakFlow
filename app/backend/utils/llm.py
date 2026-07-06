@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-from typing import Any
 from urllib import error, request
 
 logger = logging.getLogger("llm")
