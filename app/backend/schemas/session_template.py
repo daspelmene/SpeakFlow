@@ -7,13 +7,20 @@ class VocabularyItem(BaseModel):
 
 
 class TopicCard(BaseModel):
-    id: str
-    title: str
+    subtitle: str
     questions: list[str]
     vocabulary: list[VocabularyItem]
 
 
 class SessionTemplate(BaseModel):
-    id: str
     title: str
-    topic_cards: list[TopicCard]
+    topic_card: TopicCard
+
+
+class SessionTemplateGenerateRequest(BaseModel):
+    user1_id: int
+    user2_id: int
+
+class SessionTemplatesResponse(BaseModel):
+    user1_template: SessionTemplate
+    user2_template: SessionTemplate

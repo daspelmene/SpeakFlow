@@ -4,6 +4,7 @@ from sqlalchemy import desc
 
 from models.live_correction_note import LiveCorrectionNote
 
+from uuid import UUID
 
 class LiveCorrectionNoteRepository:
     def __init__(self, session: AsyncSession):
@@ -23,6 +24,19 @@ class LiveCorrectionNoteRepository:
             select(LiveCorrectionNote)
             .where(LiveCorrectionNote.target_user_id == target_user_id)
             .order_by(desc(LiveCorrectionNote.created_at))
+        )
+
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
+    
+    async def get_notes_by_author_and_room(self, room_id: UUID, author_id: int):
+        query = (
+            select(LiveCorrectionNote)
+            .where(
+                LiveCorrectionNote.room_id == room_id,
+                LiveCorrectionNote.author_id == author_id,
+            )
+            .order_by(LiveCorrectionNote.created_at)
         )
 
         result = await self.session.execute(query)

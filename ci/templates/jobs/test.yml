@@ -11,6 +11,7 @@ test-backend:
   before_script:
     - apk add --no-cache bash docker-cli-compose
     - bash ci/scripts/generate_env_data.sh
+    - echo "DEEPSEEK_API_KEY=$DEEPSEEK_API_KEY" >> /env/.env
 
   script:
     - docker compose -f ci/docker-compose.yml -p ci --env-file /env/.env up -d

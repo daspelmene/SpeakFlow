@@ -1,126 +1,49 @@
 {
-  "travel": {
-    "title": "Travel Conversation",
-    "topic_cards": [
+  "title": "Travel Conversation",
+  "topic_card": {
+    "subtitle": "Travel Planning",
+    "questions": [
+      "How do you usually choose an itinerary for a longer trip?",
+      "Would you rather stay in a hotel or other accommodation when traveling?",
+      "Have you ever had a long layover, and how did you spend the time?",
+      "What sightseeing attraction exceeded your expectations?",
+      "How important is local cuisine when visiting a new country?",
+      "Would you join a guided tour or explore on your own?",
+      "Have you ever needed a visa for a trip, and how was the process?",
+      "Would you enjoy backpacking across several countries?"
+    ],
+    "vocabulary": [
       {
-        "id": "destinations",
-        "title": "Destinations",
-        "questions": [
-          "What is your favorite travel destination?",
-          "Which destination would you recommend to a friend?",
-          "What destination exceeded your expectations?",
-          "Which landmark impressed you the most during your travels?",
-          "How important is local culture when choosing a destination?",
-          "What was your most memorable travel experience?",
-          "Would you rather revisit a favorite destination or explore a new one?",
-          "What destination is at the top of your travel bucket list?"
-        ],
-        "vocabulary": [
-          {
-            "word": "destination",
-            "meaning": "A place that someone travels to."
-          },
-          {
-            "word": "landmark",
-            "meaning": "A famous building, monument, or location."
-          },
-          {
-            "word": "culture",
-            "meaning": "The traditions, customs, and way of life of a place."
-          },
-          {
-            "word": "memorable",
-            "meaning": "Special and easy to remember."
-          },
-          {
-            "word": "recommend",
-            "meaning": "To suggest something to another person."
-          },
-          {
-            "word": "bucket list",
-            "meaning": "Things or places someone wants to experience in life."
-          }
-        ]
+        "word": "itinerary",
+        "meaning": "A plan that shows where you will go and what you will do during a trip."
       },
       {
-        "id": "accommodation",
-        "title": "Accommodation",
-        "questions": [
-          "What type of accommodation do you usually choose?",
-          "Have you ever stayed in a hostel?",
-          "Which amenities are most important to you when booking accommodation?",
-          "Do you prefer luxury hotels or budget accommodation?",
-          "Have you ever had a problem during check-in?",
-          "What makes a guest experience enjoyable?",
-          "Do you usually make a booking far in advance?",
-          "What would your ideal accommodation look like?"
-        ],
-        "vocabulary": [
-          {
-            "word": "accommodation",
-            "meaning": "A place where travelers stay."
-          },
-          {
-            "word": "hostel",
-            "meaning": "An inexpensive place with shared rooms."
-          },
-          {
-            "word": "amenities",
-            "meaning": "Services and facilities available for guests."
-          },
-          {
-            "word": "check-in",
-            "meaning": "The process of registering when arriving."
-          },
-          {
-            "word": "booking",
-            "meaning": "A reservation made in advance."
-          },
-          {
-            "word": "guest",
-            "meaning": "A person staying at a hotel or similar place."
-          }
-        ]
+        "word": "accommodation",
+        "meaning": "A place where you stay while traveling, such as a hotel or apartment."
       },
       {
-        "id": "transportation",
-        "title": "Transportation",
-        "questions": [
-          "What is your preferred mode of transportation when traveling?",
-          "Have you ever experienced a long delay during a trip?",
-          "What do you usually pack in your luggage?",
-          "Can you describe the longest flight you have taken?",
-          "Have you ever missed a departure?",
-          "What do you usually do while waiting for arrival?",
-          "How important is comfort during long journeys?",
-          "What transportation problem was the most difficult for you to solve?"
-        ],
-        "vocabulary": [
-          {
-            "word": "flight",
-            "meaning": "A journey made by airplane."
-          },
-          {
-            "word": "departure",
-            "meaning": "The scheduled time of leaving."
-          },
-          {
-            "word": "arrival",
-            "meaning": "The act of reaching a destination."
-          },
-          {
-            "word": "luggage",
-            "meaning": "Suitcases and bags used during travel."
-          },
-          {
-            "word": "delay",
-            "meaning": "A situation when transport is late."
-          },
-          {
-            "word": "journey",
-            "meaning": "The act of traveling from one place to another."
-          }
-        ]
+        "word": "layover",
+        "meaning": "A period of waiting between two flights before continuing your journey."
+      },
+      {
+        "word": "sightseeing",
+        "meaning": "Visiting famous places and attractions while traveling."
+      },
+      {
+        "word": "local cuisine",
+        "meaning": "Traditional food that is typical of a particular place."
+      },
+      {
+        "word": "guided tour",
+        "meaning": "A trip where a guide explains places and provides information."
+      },
+      {
+        "word": "visa",
+        "meaning": "An official document or permission that allows you to enter a country."
+      },
+      {
+        "word": "backpacking",
+        "meaning": "Traveling with a backpack while moving between different places, usually on a budget."
       }
     ]
   }
