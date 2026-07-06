@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     POSTGRES_USER: str
     POSTGRES_PASSWORD: str
 
+    DEEPSEEK_API_KEY: str
+
     @property
     def SECRET_KEY(self) -> str:
         return self.JWT_SECRET_KEY

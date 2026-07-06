@@ -4,6 +4,7 @@ from sqlalchemy import desc
 
 from models.session_feedback import SessionFeedback
 
+from uuid import UUID
 
 class SessionFeedbackRepository:
     def __init__(self, session: AsyncSession):
@@ -34,4 +35,21 @@ class SessionFeedbackRepository:
 
         result = await self.session.execute(query)
 
+        return list(result.scalars().all())
+    
+    async def get_feedback_by_author_and_room(
+        self,
+        room_id: UUID,
+        author_id: int,
+    ):
+        query = (
+            select(SessionFeedback)
+            .where(
+                SessionFeedback.room_id == room_id,
+                SessionFeedback.author_id == author_id,
+            )
+            .order_by(SessionFeedback.created_at)
+        )
+
+        result = await self.session.execute(query)
         return list(result.scalars().all())
