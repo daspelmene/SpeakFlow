@@ -16,6 +16,11 @@ const PONG_TIMEOUT_MS = 45_000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_BASE_DELAY_MS = 1_000;
 
+// Roles rotate automatically so both partners take turns as helper/learner.
+// Only one side (the creator, user1) drives the timer — if both sent
+// switch-roles every interval the two swaps would cancel out.
+const ROLE_SWITCH_INTERVAL_MS = 90_000;
+
 // ------------------------------------------------------------------
 // Types
 // ------------------------------------------------------------------
@@ -35,10 +40,13 @@ export type Participant = {
   userId?: number;
 };
 
+export type SessionRole = "helper" | "learner";
+
 export type AudioRoomState = {
   status: RoomStatus;
   roomId: string | null;
   userSlot: string | null;
+  role: SessionRole | null;
   participants: Participant[];
   isMuted: boolean;
   error: string | null;
@@ -103,6 +111,10 @@ function normalizeParticipants(rawParticipants: unknown): Participant[] {
     .filter((participant): participant is Participant => participant !== null);
 }
 
+function normalizeRole(rawRole: unknown): SessionRole | null {
+  return rawRole === "helper" || rawRole === "learner" ? rawRole : null;
+}
+
 function buildWebSocketUrl(roomId: string, token: string) {
   const encodedToken = encodeURIComponent(token);
   const wsBaseUrl = process.env.NEXT_PUBLIC_WS_URL;
@@ -126,6 +138,7 @@ export function useAudioRoom() {
     status: "idle",
     roomId: null,
     userSlot: null,
+    role: null,
     participants: [],
     isMuted: true,
     error: null,
@@ -306,6 +319,7 @@ export function useAudioRoom() {
                     roomId:
                       typeof data.roomId === "string" ? data.roomId : roomId,
                     userSlot: slot,
+                    role: normalizeRole(data.role),
                     participants:
                       participants.length > 0
                         ? participants
@@ -401,6 +415,13 @@ export function useAudioRoom() {
                 }
 
                 case "roles-updated": {
+                  const nextRole = normalizeRole(data.yourRole);
+
+                  if (nextRole) {
+                    update({ role: nextRole });
+                    console.log("[AudioRoom] Role updated:", nextRole);
+                  }
+
                   break;
                 }
 
@@ -652,6 +673,29 @@ export function useAudioRoom() {
   }, [connectToRoom]);
 
   // ------------------------------------------------------------------
+  // Automatic role rotation
+  // ------------------------------------------------------------------
+  // While the call is active, roles rotate every ROLE_SWITCH_INTERVAL_MS so
+  // both partners take turns being helper and learner. Only the creator
+  // (user1) drives the timer; the backend swaps both roles and notifies
+  // each side via a "roles-updated" event.
+
+  useEffect(() => {
+    if (state.status !== "active" || state.userSlot !== "user1") {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      sendWs({ type: "switch-roles" });
+      console.log("[AudioRoom] Requested automatic role switch");
+    }, ROLE_SWITCH_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [state.status, state.userSlot, sendWs]);
+
+  // ------------------------------------------------------------------
   // Create room through new backend flow
   // ------------------------------------------------------------------
 
@@ -771,6 +815,7 @@ export function useAudioRoom() {
       status: "ended",
       roomId: currentRoomId,
       userSlot: currentUserSlot,
+      role: null,
       participants: [],
       isMuted: true,
       error: null,

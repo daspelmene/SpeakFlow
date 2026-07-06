@@ -29,6 +29,10 @@ class RoomInvitationsResponse(BaseModel):
     invitations: list[RoomInvitation]
 
 
+class RoomInviteByEmailRequest(BaseModel):
+    email: str
+
+
 class RoomJoinRequest(BaseModel):
     room_id: UUID
 
