@@ -7,6 +7,7 @@ import PageContainer from "@/components/layout/PageContainer";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import Input from "@/components/ui/Input";
 import {
   createRoom,
   declineInvitation,
@@ -16,8 +17,8 @@ import {
   joinRoom,
   type RoomInvitation,
 } from "@/lib/roomApi";
-import Input from "@/components/ui/Input";
-import { getAccessToken } from "@/lib/auth";
+import { clearTokens, getAccessToken } from "@/lib/auth";
+import { getCurrentUser, isUnauthorizedError } from "@/lib/api";
 import { removeActiveRoomId, saveActiveRoomId } from "@/lib/activeRoomStorage";
 import { saveSessionPartnerUserId } from "@/lib/sessionPartnerStorage";
 import {
@@ -27,13 +28,38 @@ import {
   type SessionFeedback,
 } from "@/lib/sessionActivityApi";
 
-function formatShortRoomId(roomId: string) {
-  return roomId.length > 12 ? `${roomId.slice(0, 8)}...` : roomId;
-}
+type InvitationProfile = {
+  fullname?: string | null;
+  native_language?: string | null;
+  target_language?: string | null;
+  interests?: string[] | string | null;
+  bio?: string | null;
+};
 
 function isActiveRoomConflict(message: string) {
   return message.toLowerCase().includes("active room");
 }
+
+function getInvitationProfile(invitation: RoomInvitation) {
+  return (
+    invitation as RoomInvitation & {
+      creator_profile?: InvitationProfile | null;
+    }
+  ).creator_profile;
+}
+
+function getProfileInterests(profile: InvitationProfile | null | undefined) {
+  if (!profile?.interests) {
+    return [];
+  }
+
+  if (Array.isArray(profile.interests)) {
+    return profile.interests;
+  }
+
+  return [profile.interests];
+}
+
 
 function InvitationCard({
   invitation,
@@ -48,6 +74,10 @@ function InvitationCard({
   onJoin: (invitation: RoomInvitation) => void;
   onDecline: (invitation: RoomInvitation) => void;
 }) {
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const profile = getInvitationProfile(invitation);
+  const interests = getProfileInterests(profile);
+
   return (
     <div className="rounded-3xl border border-amber-100 bg-amber-50 p-5 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -62,37 +92,60 @@ function InvitationCard({
             Join this room to start an audio-only guided speaking session.
           </p>
 
-          {invitation.creator_profile && (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {invitation.creator_profile.native_language && (
-                <Badge variant="neutral">
-                  Speaks {invitation.creator_profile.native_language}
-                </Badge>
-              )}
-
-              {invitation.creator_profile.target_language && (
-                <Badge variant="neutral">
-                  Learning {invitation.creator_profile.target_language}
-                </Badge>
-              )}
+          {profile && (
+            <div className="mt-4">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => setIsProfileOpen((current) => !current)}
+              >
+                {isProfileOpen ? "Hide profile" : "View profile"}
+              </Button>
             </div>
           )}
 
-          {invitation.creator_profile?.bio && (
-            <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
-              {invitation.creator_profile.bio}
-            </p>
+          {isProfileOpen && profile && (
+            <div className="mt-4 rounded-2xl bg-white p-4 ring-1 ring-amber-100">
+              <p className="text-xs font-black uppercase tracking-wide text-slate-400">
+                Partner profile
+              </p>
+
+              <h4 className="mt-2 text-lg font-black text-slate-950">
+                {profile.fullname || invitation.creator_user_name}
+              </h4>
+
+              <div className="mt-3 flex flex-wrap gap-2">
+                {profile.native_language && (
+                  <Badge variant="neutral">
+                    Speaks {profile.native_language}
+                  </Badge>
+                )}
+
+                {profile.target_language && (
+                  <Badge variant="neutral">
+                    Learning {profile.target_language}
+                  </Badge>
+                )}
+              </div>
+
+              {interests.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {interests.map((interest) => (
+                    <Badge key={interest} variant="info">
+                      {interest}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+
+              {profile.bio && (
+                <p className="mt-3 text-base leading-7 text-slate-600">
+                  {profile.bio}
+                </p>
+              )}
+            </div>
           )}
-
-          <div className="mt-4 rounded-2xl bg-white px-4 py-3 ring-1 ring-amber-100">
-            <p className="text-xs font-black uppercase tracking-wide text-slate-400">
-              Room ID
-            </p>
-
-            <p className="mt-1 break-all text-base font-black text-slate-900">
-              {formatShortRoomId(invitation.room_id)}
-            </p>
-          </div>
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row lg:flex-col">
@@ -122,10 +175,12 @@ function PreviousSessionsPreview({
   notes,
   feedbackItems,
   isLoading,
+  onOpenHistory,
 }: {
   notes: LiveCorrectionNote[];
   feedbackItems: SessionFeedback[];
   isLoading: boolean;
+  onOpenHistory: () => void;
 }) {
   const hasHistory = notes.length > 0 || feedbackItems.length > 0;
 
@@ -140,13 +195,10 @@ function PreviousSessionsPreview({
           </h2>
 
           <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">
-            Review correction notes and feedback from completed speaking
-            sessions. This block currently uses available notes and feedback
-            endpoints.
+            Review saved correction notes and feedback from your previous
+            speaking practice.
           </p>
         </div>
-
-        <Badge variant="info">{notes.length + feedbackItems.length}</Badge>
       </div>
 
       {isLoading ? (
@@ -162,7 +214,7 @@ function PreviousSessionsPreview({
               Recent correction notes
             </h3>
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-4 max-h-64 space-y-3 overflow-y-auto pr-2">
               {notes.slice(0, 3).map((note) => (
                 <div
                   key={note.id}
@@ -170,10 +222,6 @@ function PreviousSessionsPreview({
                 >
                   <p className="text-sm font-bold leading-6 text-slate-700">
                     {note.note_text}
-                  </p>
-
-                  <p className="mt-2 text-xs font-bold text-slate-400">
-                    Room: {formatShortRoomId(note.room_id)}
                   </p>
                 </div>
               ))}
@@ -191,10 +239,10 @@ function PreviousSessionsPreview({
               Recent feedback
             </h3>
 
-            <div className="mt-4 space-y-3">
-              {feedbackItems.slice(0, 3).map((item, index) => (
+            <div className="mt-4 max-h-64 space-y-3 overflow-y-auto pr-2">
+              {feedbackItems.slice(0, 3).map((item) => (
                 <div
-                  key={`${item.feedback}-${index}`}
+                  key={item.id}
                   className="rounded-2xl border border-slate-200 bg-white p-4"
                 >
                   <p className="text-sm font-bold leading-6 text-slate-700">
@@ -223,6 +271,12 @@ function PreviousSessionsPreview({
           </p>
         </div>
       )}
+
+      <div className="mt-5">
+        <Button type="button" variant="secondary" onClick={onOpenHistory}>
+          View full history
+        </Button>
+      </div>
     </Card>
   );
 }
@@ -231,23 +285,30 @@ export default function DashboardPage() {
   const router = useRouter();
 
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
-
   const [pendingInvitations, setPendingInvitations] = useState<
     RoomInvitation[]
   >([]);
+
   const [notes, setNotes] = useState<LiveCorrectionNote[]>([]);
   const [feedbackItems, setFeedbackItems] = useState<SessionFeedback[]>([]);
+
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   const [isLoadingInvitations, setIsLoadingInvitations] = useState(true);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isFindingMatch, setIsFindingMatch] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState("");
   const [isInvitingByEmail, setIsInvitingByEmail] = useState(false);
-  const [inviteError, setInviteError] = useState<string | null>(null);
   const [joiningRoomId, setJoiningRoomId] = useState<string | null>(null);
   const [decliningRoomId, setDecliningRoomId] = useState<string | null>(null);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
+
+  const handleUnauthorized = useCallback(() => {
+    clearTokens();
+    removeActiveRoomId();
+    router.replace("/login");
+  }, [router]);
 
   const loadPendingInvitations = useCallback(async (silent = false) => {
     if (!silent) {
@@ -260,6 +321,11 @@ export default function DashboardPage() {
       setPendingInvitations(data.invitations || []);
       setLastUpdatedAt(new Date());
     } catch (error) {
+      if (isUnauthorizedError(error)) {
+        handleUnauthorized();
+        return;
+      }
+
       if (!silent) {
         setDashboardError(
           error instanceof Error
@@ -272,42 +338,49 @@ export default function DashboardPage() {
         setIsLoadingInvitations(false);
       }
     }
-  }, []);
+  }, [handleUnauthorized]);
 
   const loadActiveRoom = useCallback(async () => {
-    try {
-      const room = await getActiveRoom();
+      try {
+        const room = await getActiveRoom();
 
-      if (room) {
-        saveActiveRoomId(room.room_id);
-        setActiveRoomId(room.room_id);
-      } else {
-        removeActiveRoomId();
-        setActiveRoomId(null);
+        if (room) {
+          saveActiveRoomId(room.room_id);
+          setActiveRoomId(room.room_id);
+        } else {
+          removeActiveRoomId();
+          setActiveRoomId(null);
+        }
+      } catch (error) {
+        if (isUnauthorizedError(error)) {
+          handleUnauthorized();
+        }
       }
-    } catch {
-      // Keep whatever was previously known; the backend may be briefly unavailable.
-    }
-  }, []);
+    }, [handleUnauthorized]);
 
-  const loadPreviousActivity = useCallback(async () => {
-    setIsLoadingHistory(true);
+    const loadPreviousActivity = useCallback(async () => {
+      setIsLoadingHistory(true);
 
-    try {
-      const [loadedNotes, loadedFeedback] = await Promise.all([
-        getLiveCorrectionNotes(),
-        getSessionFeedback(),
-      ]);
+      try {
+        const [receivedNotes, receivedFeedback] = await Promise.all([
+          getLiveCorrectionNotes("received"),
+          getSessionFeedback("received"),
+        ]);
 
-      setNotes(Array.isArray(loadedNotes) ? loadedNotes : []);
-      setFeedbackItems(Array.isArray(loadedFeedback) ? loadedFeedback : []);
-    } catch {
-      setNotes([]);
-      setFeedbackItems([]);
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  }, []);
+        setNotes(Array.isArray(receivedNotes) ? receivedNotes : []);
+        setFeedbackItems(Array.isArray(receivedFeedback) ? receivedFeedback : []);
+      } catch (error) {
+        if (isUnauthorizedError(error)) {
+          handleUnauthorized();
+          return;
+        }
+
+        setNotes([]);
+        setFeedbackItems([]);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    }, [handleUnauthorized]);
 
   useEffect(() => {
     const token = getAccessToken();
@@ -317,10 +390,37 @@ export default function DashboardPage() {
       return;
     }
 
-    const initialLoadTimeoutId = window.setTimeout(() => {
-      void loadActiveRoom();
-      void loadPendingInvitations();
-      void loadPreviousActivity();
+    let isCancelled = false;
+
+    const timeoutId = window.setTimeout(() => {
+      async function loadDashboard() {
+        try {
+          await getCurrentUser();
+
+          if (isCancelled) {
+            return;
+          }
+
+          await Promise.all([
+            loadActiveRoom(),
+            loadPendingInvitations(),
+            loadPreviousActivity(),
+          ]);
+        } catch (error) {
+          if (isUnauthorizedError(error)) {
+            handleUnauthorized();
+            return;
+          }
+
+          setDashboardError(
+            error instanceof Error
+              ? error.message
+              : "Failed to load dashboard",
+          );
+        }
+      }
+
+      void loadDashboard();
     }, 0);
 
     const intervalId = window.setInterval(() => {
@@ -328,10 +428,17 @@ export default function DashboardPage() {
     }, 3000);
 
     return () => {
-      window.clearTimeout(initialLoadTimeoutId);
+      isCancelled = true;
+      window.clearTimeout(timeoutId);
       window.clearInterval(intervalId);
     };
-  }, [loadActiveRoom, loadPendingInvitations, loadPreviousActivity, router]);
+  }, [
+    handleUnauthorized,
+    loadActiveRoom,
+    loadPendingInvitations,
+    loadPreviousActivity,
+    router,
+  ]);
 
   async function handleFindMatch() {
     setDashboardError(null);
@@ -346,6 +453,11 @@ export default function DashboardPage() {
 
       router.push(`/session/${match.room_id}`);
     } catch (error) {
+      if (isUnauthorizedError(error)) {
+        handleUnauthorized();
+        return;
+      }
+
       const message =
         error instanceof Error
           ? error.message
@@ -364,29 +476,34 @@ export default function DashboardPage() {
   async function handleInviteByEmail() {
     const email = inviteEmail.trim();
 
-    setInviteError(null);
-    setDashboardError(null);
-
     if (!email) {
-      setInviteError("Enter the email of the user you want to invite.");
       return;
     }
 
+    setDashboardError(null);
+    setInviteError(null);
     setIsInvitingByEmail(true);
 
     try {
-      const match = await inviteByEmail(email);
+      const room = await inviteByEmail(email);
 
-      saveSessionPartnerUserId(match.room_id, match.invited_user_id);
-      saveActiveRoomId(match.room_id);
-      setActiveRoomId(match.room_id);
+      saveSessionPartnerUserId(room.room_id, room.invited_user_id);
+      saveActiveRoomId(room.room_id);
+      setActiveRoomId(room.room_id);
+      setInviteEmail("");
 
-      router.push(`/session/${match.room_id}`);
+      router.push(`/session/${room.room_id}`);
     } catch (error) {
+      if (isUnauthorizedError(error)) {
+        handleUnauthorized();
+        return;
+      }
+
       const message =
-        error instanceof Error ? error.message : "Failed to invite this user";
+        error instanceof Error ? error.message : "Failed to invite user";
 
       setInviteError(message);
+      setDashboardError(message);
 
       if (isActiveRoomConflict(message)) {
         void loadActiveRoom();
@@ -403,16 +520,17 @@ export default function DashboardPage() {
     try {
       await joinRoom(invitation.room_id);
 
-      saveSessionPartnerUserId(
-        invitation.room_id,
-        invitation.creator_user_id,
-      );
-
+      saveSessionPartnerUserId(invitation.room_id, invitation.creator_user_id);
       saveActiveRoomId(invitation.room_id);
       setActiveRoomId(invitation.room_id);
 
       router.push(`/session/${invitation.room_id}`);
     } catch (error) {
+      if (isUnauthorizedError(error)) {
+        handleUnauthorized();
+        return;
+      }
+
       setDashboardError(
         error instanceof Error ? error.message : "Failed to join room",
       );
@@ -435,6 +553,11 @@ export default function DashboardPage() {
         ),
       );
     } catch (error) {
+      if (isUnauthorizedError(error)) {
+        handleUnauthorized();
+        return;
+      }
+
       setDashboardError(
         error instanceof Error
           ? error.message
@@ -487,17 +610,13 @@ export default function DashboardPage() {
                 <Badge variant="info">Active session</Badge>
 
                 <h2 className="mt-4 text-2xl font-black text-slate-950">
-                  Continue current room
+                  Continue current session
                 </h2>
 
                 <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">
                   The backend reports that you are already in an active room.
                   Use this button if you opened Profile or another page and
                   want to return to the session.
-                </p>
-
-                <p className="mt-3 break-all font-mono text-sm font-black text-indigo-800">
-                  {activeRoomId}
                 </p>
               </div>
 
@@ -544,52 +663,33 @@ export default function DashboardPage() {
               {isFindingMatch ? "Creating room..." : "Find partner"}
             </Button>
           </div>
-        </Card>
-      </section>
 
-      <section className="mb-7">
-        <Card className="p-6">
-          <div className="flex flex-col gap-5">
-            <div>
-              <Badge variant="info">Invite by email</Badge>
-
-              <h2 className="mt-4 text-2xl font-black text-slate-950">
-                Invite a specific user
-              </h2>
-
-              <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">
-                Already know who you want to practice with? Enter their email to
-                create a room and send them an invitation directly.
-              </p>
+          <form
+            className="mt-6 flex flex-col gap-3 sm:flex-row"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleInviteByEmail();
+            }}
+          >
+            <div className="w-full sm:max-w-md">
+              <Input
+                type="email"
+                placeholder="partner@example.com"
+                value={inviteEmail}
+                onChange={(event) => setInviteEmail(event.target.value)}
+                disabled={isInvitingByEmail}
+                error={inviteError ?? undefined}
+                aria-label="Email of the user to invite"
+              />
             </div>
 
-            <form
-              className="flex flex-col gap-3 sm:flex-row sm:items-start"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void handleInviteByEmail();
-              }}
+            <Button
+              type="submit"
+              disabled={isInvitingByEmail || inviteEmail.trim().length === 0}
             >
-              <div className="w-full sm:max-w-md">
-                <Input
-                  type="email"
-                  placeholder="partner@example.com"
-                  value={inviteEmail}
-                  onChange={(event) => setInviteEmail(event.target.value)}
-                  disabled={isInvitingByEmail}
-                  error={inviteError ?? undefined}
-                  aria-label="Email of the user to invite"
-                />
-              </div>
-
-              <Button
-                type="submit"
-                disabled={isInvitingByEmail || inviteEmail.trim().length === 0}
-              >
-                {isInvitingByEmail ? "Inviting..." : "Send invitation"}
-              </Button>
-            </form>
-          </div>
+              {isInvitingByEmail ? "Inviting..." : "Send invitation"}
+            </Button>
+          </form>
         </Card>
       </section>
 
@@ -671,6 +771,7 @@ export default function DashboardPage() {
         notes={notes}
         feedbackItems={feedbackItems}
         isLoading={isLoadingHistory}
+        onOpenHistory={() => router.push("/history")}
       />
     </PageContainer>
   );

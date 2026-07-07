@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useSyncExternalStore } from "react";
-import { removeActiveRoomId } from "@/lib/activeRoomStorage";
+import { useEffect, useSyncExternalStore } from "react";
+
 import Button from "@/components/ui/Button";
+import { getCurrentUser, isUnauthorizedError } from "@/lib/api";
 import { clearTokens, getAccessToken } from "@/lib/auth";
+import { removeActiveRoomId } from "@/lib/activeRoomStorage";
 
 function subscribe(callback: () => void) {
   window.addEventListener("storage", callback);
@@ -25,15 +27,57 @@ function getServerSnapshot() {
   return false;
 }
 
+function isProtectedPath(pathname: string) {
+  return (
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/profile") ||
+    pathname.startsWith("/session") ||
+    pathname.startsWith("/history")
+  );
+}
+
 export default function Header() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const isLoggedIn = useSyncExternalStore(
+  const hasStoredToken = useSyncExternalStore(
     subscribe,
     getAuthSnapshot,
     getServerSnapshot,
   );
+
+  useEffect(() => {
+    if (!hasStoredToken) {
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function validateSession() {
+      try {
+        await getCurrentUser();
+      } catch (error) {
+        if (isCancelled) {
+          return;
+        }
+
+        if (isUnauthorizedError(error)) {
+          clearTokens();
+          removeActiveRoomId();
+
+          if (isProtectedPath(pathname)) {
+            router.replace("/login");
+          }
+        }
+      }
+    }
+
+    void validateSession();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [hasStoredToken, pathname, router]);
 
   function handleLogOut() {
     clearTokens();
@@ -41,7 +85,13 @@ export default function Header() {
     router.push("/login");
   }
 
-  const logoHref = isLoggedIn ? "/dashboard" : "/";
+  const shouldShowPrivateNavigation =
+    hasStoredToken &&
+    pathname !== "/" &&
+    pathname !== "/login" &&
+    pathname !== "/register";
+
+  const logoHref = shouldShowPrivateNavigation ? "/dashboard" : "/";
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -55,6 +105,7 @@ export default function Header() {
             <p className="text-2xl font-black tracking-tight text-slate-950">
               SpeakFlow
             </p>
+
             <p className="hidden text-sm font-semibold text-slate-500 sm:block">
               Structured language practice
             </p>
@@ -62,7 +113,7 @@ export default function Header() {
         </Link>
 
         <nav className="flex items-center gap-3">
-          {isLoggedIn ? (
+          {shouldShowPrivateNavigation ? (
             <>
               <Link
                 href="/dashboard"

@@ -70,6 +70,7 @@ export default function AudioRoom({
     joinRoom,
     leaveRoom,
     toggleMute,
+    switchRoles,
   } = useAudioRoom();
 
   const hasAutoJoinedRef = useRef(false);
@@ -169,7 +170,13 @@ export default function AudioRoom({
                 </p>
               </div>
 
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">
+              <span
+                className={`rounded-full px-3 py-1 text-xs font-black ${
+                  participant.muted
+                    ? "bg-red-100 text-red-700"
+                    : "bg-emerald-100 text-emerald-700"
+                }`}
+              >
                 {participant.muted ? "Muted" : "Microphone active"}
               </span>
             </div>
@@ -207,7 +214,11 @@ export default function AudioRoom({
             {isMuted ? "Unmute microphone" : "Mute microphone"}
           </Button>
         )}
-
+        {status === "active" && (
+          <Button type="button" variant="secondary" onClick={switchRoles}>
+            Switch roles
+          </Button>
+        )}
         {canLeaveRoom && (
           <Button type="button" variant="danger" onClick={() => void leaveRoom()}>
             Leave room

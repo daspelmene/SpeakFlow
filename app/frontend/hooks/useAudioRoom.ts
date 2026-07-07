@@ -16,11 +16,6 @@ const PONG_TIMEOUT_MS = 45_000;
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_BASE_DELAY_MS = 1_000;
 
-// Roles rotate automatically so both partners take turns as helper/learner.
-// Only one side (the creator, user1) drives the timer — if both sent
-// switch-roles every interval the two swaps would cancel out.
-const ROLE_SWITCH_INTERVAL_MS = 90_000;
-
 // ------------------------------------------------------------------
 // Types
 // ------------------------------------------------------------------
@@ -298,49 +293,40 @@ export function useAudioRoom() {
               const msgType = data.type;
 
               switch (msgType) {
+                
+
                 case "room-state": {
-                  const slot =
-                    typeof data.userSlot === "string" ? data.userSlot : null;
-
-                  const userName =
-                    typeof data.userName === "string"
-                      ? data.userName
-                      : "Participant";
-
                   const participants = normalizeParticipants(data.participants);
 
-                  userSlotRef.current = slot;
+                  const nextRoomId =
+                    typeof data.roomId === "string" ? data.roomId : roomId;
 
-                  const audioElement = await wsAudio.startPlayback();
-                  await wsAudio.waitForPlaybackReady();
+                  const nextUserSlot =
+                    typeof data.userSlot === "string" ? data.userSlot : null;
 
-                  update({
-                    remoteAudioElement: audioElement,
-                    roomId:
-                      typeof data.roomId === "string" ? data.roomId : roomId,
-                    userSlot: slot,
-                    role: normalizeRole(data.role),
-                    participants:
-                      participants.length > 0
-                        ? participants
-                        : slot
-                          ? [{ slot, name: userName, muted: wsAudio.isMuted }]
-                          : [],
+                  const nextRole =
+                    data.role === "helper" || data.role === "learner" ? data.role : null;
+
+                  roomIdRef.current = nextRoomId;
+                  userSlotRef.current = nextUserSlot;
+
+                  let remoteAudioElement: HTMLAudioElement | null = null;
+
+                  if (participants.length > 1) {
+                    remoteAudioElement = await wsAudio.startPlayback();
+                    await wsAudio.waitForPlaybackReady();
+                  }
+
+                  setState((previousState) => ({
+                    ...previousState,
+                    roomId: nextRoomId,
+                    userSlot: nextUserSlot,
+                    role: nextRole ?? previousState.role,
+                    participants,
+                    remoteAudioElement,
                     status: participants.length > 1 ? "active" : "waiting",
-                  });
-
-                  saveActiveRoomId(roomId);
-
-                  reconnectAttemptsRef.current = 0;
-
-                  // After a reconnect the server keeps the pre-disconnect
-                  // mute flag; re-sync our actual state.
-                  sendWs({ type: "mute", muted: wsAudio.isMuted });
-
-                  console.log("[AudioRoom] Room state received", {
-                    slot,
-                    participants: participants.length,
-                  });
+                    error: null,
+                  }));
 
                   break;
                 }
@@ -397,6 +383,25 @@ export function useAudioRoom() {
                   });
 
                   console.log("[AudioRoom] Peer reconnected:", peerName);
+                  break;
+                }
+
+                case "peer-disconnected": {
+                  const leftSlot =
+                    typeof data.userSlot === "string" ? data.userSlot : null;
+
+                  setState((previousState) => ({
+                    ...previousState,
+                    participants: leftSlot
+                      ? previousState.participants.filter(
+                          (participant) => participant.slot !== leftSlot,
+                        )
+                      : previousState.participants,
+                    status: "waiting",
+                    error: "Your partner disconnected. Waiting for them to reconnect.",
+                  }));
+
+                  console.log("[AudioRoom] Peer disconnected:", leftSlot);
                   break;
                 }
 
@@ -493,6 +498,26 @@ export function useAudioRoom() {
                   console.log("[AudioRoom] User joined:", joinedName);
                   break;
                 }
+                case "peer-disconnected": {
+                  const leftSlot =
+                    typeof data.userSlot === "string" ? data.userSlot : null;
+
+                  if (!leftSlot) {
+                    return;
+                  }
+
+                  setState((previousState) => ({
+                    ...previousState,
+                    participants: previousState.participants.filter(
+                      (participant) => participant.slot !== leftSlot,
+                    ),
+                    status: "waiting",
+                    error: "Your partner disconnected. Waiting for them to reconnect.",
+                  }));
+
+                  console.log("[AudioRoom] Peer disconnected:", leftSlot);
+                  break;
+                }
 
                 case "user-left": {
                   const leftSlot =
@@ -505,10 +530,10 @@ export function useAudioRoom() {
                           (participant) => participant.slot !== leftSlot,
                         )
                       : previousState.participants,
-                    status: "ended",
+                    status: "waiting",
+                    error: "Your partner left the audio connection. Waiting for reconnect.",
                   }));
 
-                  removeActiveRoomId();
                   break;
                 }
 
@@ -523,13 +548,24 @@ export function useAudioRoom() {
                     return;
                   }
 
+                  const isPeerUnmuting = mutedSlot !== userSlotRef.current && !muted;
+
+                  if (isPeerUnmuting) {
+                    const audioElement = await wsAudio.resetPlayback();
+
+                    update({
+                      remoteAudioElement: audioElement,
+                    });
+
+                    console.log("[AudioRoom] Playback reset after peer unmute");
+                  }
+
                   setState((previousState) => ({
                     ...previousState,
-                    participants: previousState.participants.map(
-                      (participant) =>
-                        participant.slot === mutedSlot
-                          ? { ...participant, muted }
-                          : participant,
+                    participants: previousState.participants.map((participant) =>
+                      participant.slot === mutedSlot
+                        ? { ...participant, muted }
+                        : participant,
                     ),
                   }));
 
@@ -665,35 +701,12 @@ export function useAudioRoom() {
         wsAudio.close();
       }
     },
-    [clearReconnectTimer, sendWs, startHeartbeat, stopHeartbeat, update],
+    [clearReconnectTimer, startHeartbeat, stopHeartbeat, update],
   );
 
   useEffect(() => {
     connectToRoomRef.current = connectToRoom;
   }, [connectToRoom]);
-
-  // ------------------------------------------------------------------
-  // Automatic role rotation
-  // ------------------------------------------------------------------
-  // While the call is active, roles rotate every ROLE_SWITCH_INTERVAL_MS so
-  // both partners take turns being helper and learner. Only the creator
-  // (user1) drives the timer; the backend swaps both roles and notifies
-  // each side via a "roles-updated" event.
-
-  useEffect(() => {
-    if (state.status !== "active" || state.userSlot !== "user1") {
-      return;
-    }
-
-    const intervalId = window.setInterval(() => {
-      sendWs({ type: "switch-roles" });
-      console.log("[AudioRoom] Requested automatic role switch");
-    }, ROLE_SWITCH_INTERVAL_MS);
-
-    return () => {
-      window.clearInterval(intervalId);
-    };
-  }, [state.status, state.userSlot, sendWs]);
 
   // ------------------------------------------------------------------
   // Create room through new backend flow
@@ -762,6 +775,12 @@ export function useAudioRoom() {
 
     const muted = wsAudio.toggleMute();
 
+    // When a user unmutes, restart MediaRecorder so the remote browser receives
+    // a fresh WebM/Opus header instead of continuing from a broken stream.
+    if (!muted) {
+      wsAudio.restartMediaRecorder();
+    }
+
     update({ isMuted: muted });
     sendWs({ type: "mute", muted });
 
@@ -779,6 +798,19 @@ export function useAudioRoom() {
     }
   }, [sendWs, update]);
 
+  // ------------------------------------------------------------------
+  // Switch roles
+  // ------------------------------------------------------------------
+
+  const switchRoles = useCallback(() => {
+    if (state.status !== "active") {
+      update({ error: "Roles can be switched only during an active call." });
+      return;
+    }
+
+    sendWs({ type: "switch-roles" });
+    console.log("[AudioRoom] Requested role switch");
+  }, [sendWs, state.status, update]);
   // ------------------------------------------------------------------
   // Leave room
   // ------------------------------------------------------------------
@@ -855,5 +887,6 @@ export function useAudioRoom() {
     joinRoom,
     leaveRoom,
     toggleMute,
+    switchRoles,
   };
 }

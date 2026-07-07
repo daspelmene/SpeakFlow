@@ -10,18 +10,29 @@ import PageContainer from "@/components/layout/PageContainer";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import { getCurrentUser } from "@/lib/api";
+import type { Participant, RoomStatus } from "@/hooks/useAudioRoom";
+import { getActiveRoom } from "@/lib/roomApi";
 import {
   createLiveCorrectionNote,
   createSessionFeedback,
+  getAuthoredLiveCorrectionNotes,
+  getAuthoredSessionFeedback,
   type LiveCorrectionNote,
   type SessionFeedback,
 } from "@/lib/sessionActivityApi";
 import { getSessionPartnerUserId } from "@/lib/sessionPartnerStorage";
 import {
+  getSessionContentUnlocked,
+  getSessionUiSnapshot,
+  saveSessionContentUnlocked,
+  saveSessionUiSnapshot,
+} from "@/lib/sessionUiSnapshotStorage";
+import {
+  generateSessionTemplates,
   getSessionTemplates,
   type SessionTemplate,
 } from "@/lib/sessionTemplateApi";
-import type { Participant, RoomStatus } from "@/hooks/useAudioRoom";
 
 type SessionRole = "helper" | "learner" | "unknown";
 
@@ -29,11 +40,19 @@ type AudioRoomStateSnapshot = {
   status: RoomStatus;
   roomId: string | null;
   userSlot: string | null;
-  role: "helper" | "learner" | null;
+  role?: string | null;
   participants: Participant[];
 };
 
-function getRole(userSlot: string | null): SessionRole {
+function getServerRole(role: string | null | undefined) {
+  if (role === "helper" || role === "learner") {
+    return role;
+  }
+
+  return null;
+}
+
+function getRoleFromUserSlot(userSlot: string | null): SessionRole {
   if (!userSlot) {
     return "unknown";
   }
@@ -89,6 +108,38 @@ function getStatusLabel(status: RoomStatus) {
   return "Finished";
 }
 
+function getFeedbackAuthorRole(role: SessionRole) {
+  if (role === "helper" || role === "learner") {
+    return role;
+  }
+
+  return null;
+}
+
+function getFeedbackRoleTitle(authorRole: string) {
+  if (authorRole === "helper") {
+    return "Helper feedback";
+  }
+
+  if (authorRole === "learner") {
+    return "Learner feedback";
+  }
+
+  return "Partner feedback";
+}
+
+function getFeedbackRoleBadgeVariant(authorRole: string) {
+  if (authorRole === "helper") {
+    return "success" as const;
+  }
+
+  if (authorRole === "learner") {
+    return "info" as const;
+  }
+
+  return "neutral" as const;
+}
+
 export default function SessionRoomPage() {
   const params = useParams<{ roomId: string }>();
   const roomId = params.roomId;
@@ -99,18 +150,35 @@ export default function SessionRoomPage() {
     null,
   );
   const [participants, setParticipants] = useState<Participant[]>([]);
+
   const [noteText, setNoteText] = useState("");
   const [feedbackText, setFeedbackText] = useState("");
   const [notes, setNotes] = useState<LiveCorrectionNote[]>([]);
   const [feedbackItems, setFeedbackItems] = useState<SessionFeedback[]>([]);
+
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [isSavingFeedback, setIsSavingFeedback] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
+
   const [partnerUserIdFromStorage, setPartnerUserIdFromStorage] = useState<
     number | null
   >(null);
+
   const [sessionTemplate, setSessionTemplate] =
     useState<SessionTemplate | null>(null);
+
+  const [wasSessionContentUnlocked, setWasSessionContentUnlocked] =
+    useState(false);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setWasSessionContentUnlocked(getSessionContentUnlocked(roomId));
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [roomId]);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -125,29 +193,123 @@ export default function SessionRoomPage() {
   useEffect(() => {
     let isMounted = true;
 
-    async function loadTemplate() {
-      try {
-        const templates = await getSessionTemplates();
-        const firstTemplate = Object.values(templates)[0] ?? null;
+    const timeoutId = window.setTimeout(() => {
+      const savedTemplate = getSessionUiSnapshot(roomId);
 
-        if (isMounted) {
-          setSessionTemplate(firstTemplate);
-        }
-      } catch {
-        if (isMounted) {
-          setSessionTemplate(null);
+      if (savedTemplate && isMounted) {
+        setSessionTemplate(savedTemplate);
+        return;
+      }
+
+      async function loadTemplate() {
+        try {
+          const templates = await getSessionTemplates();
+          const firstTemplate = Object.values(templates)[0] ?? null;
+
+          if (isMounted) {
+            setSessionTemplate(firstTemplate);
+
+            if (firstTemplate) {
+              saveSessionUiSnapshot(roomId, firstTemplate);
+            }
+          }
+        } catch {
+          if (isMounted) {
+            setSessionTemplate(null);
+          }
         }
       }
-    }
 
-    void loadTemplate();
+      void loadTemplate();
+    }, 0);
 
     return () => {
       isMounted = false;
+      window.clearTimeout(timeoutId);
     };
-  }, []);
+  }, [roomId]);
 
-  const topicCards = sessionTemplate?.topic_cards ?? [];
+  useEffect(() => {
+    let isMounted = true;
+
+    const timeoutId = window.setTimeout(() => {
+      async function restoreActiveRoomState() {
+        try {
+          const activeRoom = await getActiveRoom();
+
+          if (!isMounted || !activeRoom) {
+            return;
+          }
+
+          if (activeRoom.room_id === roomId) {
+            setCurrentUserSlot(activeRoom.user_slot);
+            setServerRole(getServerRole(activeRoom.role));
+
+            saveSessionContentUnlocked(roomId);
+            setWasSessionContentUnlocked(true);
+          }
+        } catch {
+          // If active-room is unavailable, WebSocket room-state can still update the page.
+        }
+      }
+
+      void restoreActiveRoomState();
+    }, 0);
+
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [roomId]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const timeoutId = window.setTimeout(() => {
+      async function loadCurrentSessionActivity() {
+        try {
+          const [loadedNotes, loadedFeedback] = await Promise.all([
+            getAuthoredLiveCorrectionNotes(),
+            getAuthoredSessionFeedback(),
+          ]);
+
+          if (!isMounted) {
+            return;
+          }
+
+          const roomNotes = Array.isArray(loadedNotes)
+            ? loadedNotes.filter((note) => note.room_id === roomId)
+            : [];
+
+          const roomFeedback = Array.isArray(loadedFeedback)
+            ? loadedFeedback.filter((item) => item.room_id === roomId)
+            : [];
+
+          setNotes(roomNotes);
+          setFeedbackItems(roomFeedback);
+        } catch {
+          if (!isMounted) {
+            return;
+          }
+
+          setNotes([]);
+          setFeedbackItems([]);
+        }
+      }
+
+      void loadCurrentSessionActivity();
+    }, 0);
+
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [roomId]);
+
+  const topicCards = useMemo(
+    () => sessionTemplate?.topic_cards ?? [],
+    [sessionTemplate],
+  );
 
   const vocabularyHints = useMemo(
     () => topicCards.flatMap((card) => card.vocabulary),
@@ -162,21 +324,98 @@ export default function SessionRoomPage() {
     return partner?.userId ?? partnerUserIdFromStorage;
   }, [participants, currentUserSlot, partnerUserIdFromStorage]);
 
-  // Prefer the role the backend reports (it rotates over time); fall back to
-  // the slot-derived default before the first room-state arrives.
   const currentRole = useMemo(
-    () => serverRole ?? getRole(currentUserSlot),
+    () => serverRole ?? getRoleFromUserSlot(currentUserSlot),
     [serverRole, currentUserSlot],
   );
 
+  useEffect(() => {
+    if (!currentUserSlot || targetUserId === null) {
+      return;
+    }
+
+    const sessionUserSlot = currentUserSlot;
+    const partnerUserId = targetUserId;
+
+    let isMounted = true;
+
+    const timeoutId = window.setTimeout(() => {
+      async function generateAiTemplate() {
+        try {
+          const currentUser = await getCurrentUser();
+
+          const user1Id =
+            sessionUserSlot === "user1" ? currentUser.id : partnerUserId;
+
+          const user2Id =
+            sessionUserSlot === "user1" ? partnerUserId : currentUser.id;
+
+          const generatedTemplates = await generateSessionTemplates({
+            user1_id: user1Id,
+            user2_id: user2Id,
+          });
+
+          const templateForCurrentUser =
+            sessionUserSlot === "user1"
+              ? generatedTemplates.user1_template
+              : generatedTemplates.user2_template;
+
+          if (!isMounted) {
+            return;
+          }
+
+          setSessionTemplate(templateForCurrentUser);
+          saveSessionUiSnapshot(roomId, templateForCurrentUser);
+        } catch {
+          // If DeepSeek is not configured or generation fails, keep static fallback.
+        }
+      }
+
+      void generateAiTemplate();
+    }, 0);
+
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [currentUserSlot, roomId, targetUserId]);
+  
+  const isSessionReady = participants.length >= 2;
   const isSessionActive = audioStatus === "active";
   const isSessionEnded = audioStatus === "ended";
-  const shouldShowSessionContent = isSessionActive || isSessionEnded;
+
+  const shouldShowSessionContent =
+    isSessionReady ||
+    wasSessionContentUnlocked ||
+    isSessionActive ||
+    isSessionEnded;
+
+  useEffect(() => {
+    if (!isSessionReady && !isSessionActive && !isSessionEnded) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      saveSessionContentUnlocked(roomId);
+      setWasSessionContentUnlocked(true);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isSessionActive, isSessionEnded, isSessionReady, roomId]);
 
   const handleRoomStateChange = useCallback((state: AudioRoomStateSnapshot) => {
     setAudioStatus(state.status);
-    setCurrentUserSlot(state.userSlot);
-    setServerRole(state.role);
+
+    if (state.userSlot) {
+      setCurrentUserSlot(state.userSlot);
+    }
+
+    if (state.role === "helper" || state.role === "learner") {
+      setServerRole(state.role);
+    }
+
     setParticipants(state.participants);
   }, []);
 
@@ -203,7 +442,9 @@ export default function SessionRoomPage() {
       setNoteText("");
     } catch (error) {
       setSessionError(
-        error instanceof Error ? error.message : "Failed to save correction note",
+        error instanceof Error
+          ? error.message
+          : "Failed to save correction note",
       );
     } finally {
       setIsSavingNote(false);
@@ -214,8 +455,9 @@ export default function SessionRoomPage() {
     event.preventDefault();
 
     const text = feedbackText.trim();
+    const feedbackAuthorRole = getFeedbackAuthorRole(currentRole);
 
-    if (!text || !targetUserId) {
+    if (!text || !targetUserId || !feedbackAuthorRole) {
       return;
     }
 
@@ -226,6 +468,7 @@ export default function SessionRoomPage() {
       const createdFeedback = await createSessionFeedback({
         room_id: roomId,
         target_user_id: targetUserId,
+        author_role: feedbackAuthorRole,
         feedback: text,
       });
 
@@ -255,17 +498,7 @@ export default function SessionRoomPage() {
         </p>
       </div>
 
-      <div className="mb-6 grid gap-4 lg:grid-cols-3">
-        <Card className="p-5">
-          <p className="text-xs font-black uppercase tracking-wide text-slate-400">
-            Room ID
-          </p>
-
-          <p className="mt-2 break-all font-mono text-xl font-black text-slate-950">
-            {roomId}
-          </p>
-        </Card>
-
+      <div className="mb-6 grid gap-4 lg:grid-cols-2">
         <Card className="p-5">
           <p className="text-xs font-black uppercase tracking-wide text-slate-400">
             Room status
@@ -393,10 +626,9 @@ export default function SessionRoomPage() {
 
             <div className="mt-4 rounded-2xl bg-slate-50 p-4">
               <p className="text-sm font-bold leading-6 text-slate-500">
-                Roles rotate automatically every 90 seconds so both partners
-                take turns as helper and learner. The switch is synchronized by
-                the backend over WebSocket, so you and your partner always hold
-                opposite roles.
+                Role switching is intentionally disabled for now. It should be
+                synchronized by the backend through a WebSocket event to prevent
+                both users from becoming helpers or learners at the same time.
               </p>
             </div>
           </Card>
@@ -416,7 +648,8 @@ export default function SessionRoomPage() {
               </h2>
 
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Save short correction notes for your partner during the session.
+                Save short correction notes for your partner. After rejoining
+                this session, your own saved notes will remain visible here.
               </p>
 
               <form className="mt-4 space-y-3" onSubmit={handleSaveNote}>
@@ -478,12 +711,12 @@ export default function SessionRoomPage() {
               <Badge variant="neutral">Feedback</Badge>
 
               <h2 className="mt-3 text-xl font-black tracking-tight text-slate-950">
-                Partner feedback
+                Feedback you wrote
               </h2>
 
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Current backend requires the room to exist when saving feedback,
-                so save it before leaving the room.
+                Save feedback you wrote for your partner. After rejoining this
+                session, your own saved feedback will remain visible here.
               </p>
 
               <form className="mt-4 space-y-3" onSubmit={handleSaveFeedback}>
@@ -499,21 +732,30 @@ export default function SessionRoomPage() {
                   type="submit"
                   size="sm"
                   disabled={
-                    !targetUserId || !feedbackText.trim() || isSavingFeedback
+                    !targetUserId ||
+                    !feedbackText.trim() ||
+                    isSavingFeedback ||
+                    !getFeedbackAuthorRole(currentRole)
                   }
                 >
                   {isSavingFeedback ? "Saving..." : "Save feedback"}
                 </Button>
               </form>
 
-              <div className="mt-4 max-h-40 space-y-2 overflow-y-auto pr-2">
+              <div className="mt-4 max-h-56 space-y-2 overflow-y-auto pr-2">
                 {feedbackItems.length > 0 ? (
-                  feedbackItems.map((item, index) => (
+                  feedbackItems.map((item) => (
                     <div
-                      key={`${item.feedback}-${index}`}
+                      key={item.id}
                       className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
                     >
-                      <p className="text-sm font-bold leading-6 text-slate-800">
+                      <Badge
+                        variant={getFeedbackRoleBadgeVariant(item.author_role)}
+                      >
+                        {getFeedbackRoleTitle(item.author_role)}
+                      </Badge>
+
+                      <p className="mt-2 text-sm font-bold leading-6 text-slate-800">
                         {item.feedback}
                       </p>
                     </div>

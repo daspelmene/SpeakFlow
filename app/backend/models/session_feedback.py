@@ -1,10 +1,9 @@
+import uuid
 from datetime import datetime
 
-from sqlalchemy import func
-from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, String, func
 from sqlalchemy.dialects.postgresql import UUID
-import uuid
+from sqlalchemy.orm import Mapped, mapped_column
 
 from models.base import Base
 
@@ -21,8 +20,17 @@ class SessionFeedback(Base):
         index=True,
     )
 
-    author_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    target_user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    author_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    target_user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    author_role: Mapped[str] = mapped_column(String, nullable=False)
 
     feedback: Mapped[str]
 
