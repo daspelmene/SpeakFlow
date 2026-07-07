@@ -38,64 +38,58 @@ export default function Home() {
           </div>
         </div>
 
-        <Card className="p-4">
-          <div className="rounded-2xl bg-indigo-50 p-4">
-            <Badge variant="success">Example guided session</Badge>
+        <Card className="p-5">
+          <Badge variant="success">Simple session flow</Badge>
 
-            <h2 className="mt-3 text-2xl font-black tracking-tight text-slate-950">
-              University Life Discussion
-            </h2>
+          <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-950">
+            From match to useful notes
+          </h2>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl bg-white p-3 shadow-sm">
-                <p className="text-xs font-black uppercase tracking-wide text-slate-400">
-                  Role
-                </p>
-                <p className="mt-1 text-lg font-black text-slate-950">
-                  Learner
-                </p>
-              </div>
+          <p className="mt-3 text-base leading-7 text-slate-600">
+            The interface focuses on the main actions learners need before,
+            during, and after speaking practice.
+          </p>
 
-              <div className="rounded-2xl bg-white p-3 shadow-sm">
-                <p className="text-xs font-black uppercase tracking-wide text-slate-400">
-                  Timer
-                </p>
-                <p className="mt-1 text-lg font-black text-indigo-700">
-                  05:00
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-3 rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm">
-              <p className="text-xs font-black uppercase tracking-wide text-indigo-500">
-                Topic card
+          <div className="mt-5 grid gap-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-black uppercase tracking-wide text-indigo-500">
+                Step 1
               </p>
 
-              <p className="mt-2 text-base font-black leading-7 text-slate-950">
-                Tell your partner about your university, your favorite subject,
-                and one challenge you faced while studying.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <h3 className="text-lg font-black text-slate-950">
-                Guided sessions
+              <h3 className="mt-2 text-xl font-black text-slate-950">
+                Find a partner
               </h3>
+
               <p className="mt-1 text-base leading-7 text-slate-600">
-                Users follow clear stages, topics, questions, and useful
-                phrases.
+                Match with another learner by language goals and interests.
               </p>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <h3 className="text-lg font-black text-slate-950">
-                Balanced roles
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-black uppercase tracking-wide text-indigo-500">
+                Step 2
+              </p>
+
+              <h3 className="mt-2 text-xl font-black text-slate-950">
+                Join the audio room
               </h3>
+
               <p className="mt-1 text-base leading-7 text-slate-600">
-                Both partners get time to speak, listen, help, and receive
-                feedback.
+                Follow topic cards and keep the conversation structured.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-sm font-black uppercase tracking-wide text-indigo-500">
+                Step 3
+              </p>
+
+              <h3 className="mt-2 text-xl font-black text-slate-950">
+                Review corrections
+              </h3>
+
+              <p className="mt-1 text-base leading-7 text-slate-600">
+                Save helpful feedback and review notes from previous sessions.
               </p>
             </div>
           </div>

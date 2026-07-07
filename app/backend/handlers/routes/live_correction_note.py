@@ -42,6 +42,12 @@ async def create_note(
             detail="Room is not active",
         )
 
+    if room.is_finished:
+        raise HTTPException(
+            status_code=403,
+            detail="Room has already finished",
+        )
+
     if user.id not in (room.user_creator_id, room.invited_user_id):
         raise HTTPException(status_code=403, detail="Not a participant of this room")
 

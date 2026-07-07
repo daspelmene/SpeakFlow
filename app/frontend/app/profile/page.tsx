@@ -1,8 +1,9 @@
 "use client";
 
-import { FormEvent, KeyboardEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import InterestSelector from "@/components/InterestSelector";
 import PageContainer from "@/components/layout/PageContainer";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -138,7 +139,12 @@ export default function ProfilePage() {
       return;
     }
 
-    if (interests.includes(normalizedInterest)) {
+    const alreadySelected = interests.some(
+      (interest) =>
+        interest.trim().toLowerCase() === normalizedInterest.toLowerCase(),
+    );
+
+    if (alreadySelected) {
       setInterestInput("");
       return;
     }
@@ -157,12 +163,6 @@ export default function ProfilePage() {
     );
   }
 
-  function handleInterestKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter") {
-      event.preventDefault();
-      addInterest(interestInput);
-    }
-  }
 
   function validateForm() {
     const errors: ProfileFieldErrors = {};
@@ -377,60 +377,18 @@ export default function ProfilePage() {
               />
             </div>
 
-            <div>
-              <label className="mb-3 block text-base font-bold text-slate-800">
-                Interests
-              </label>
-
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <Input
-                  value={interestInput}
-                  onChange={(event) => {
-                    setInterestInput(event.target.value);
-                    clearFieldError("interests");
-                  }}
-                  onKeyDown={handleInterestKeyDown}
-                  placeholder="Type interest and press Enter"
-                  error={fieldErrors.interests}
-                />
-
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => addInterest(interestInput)}
-                >
-                  Add
-                </Button>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-3">
-                {suggestedInterests.map((interest) => (
-                  <button
-                    key={interest}
-                    type="button"
-                    onClick={() => addInterest(interest)}
-                    className="rounded-full border border-slate-200 bg-white px-4 py-2 text-base font-bold text-slate-600 transition-colors hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
-                  >
-                    + {interest}
-                  </button>
-                ))}
-              </div>
-
-              {interests.length > 0 && (
-                <div className="mt-5 flex flex-wrap gap-3">
-                  {interests.map((interest) => (
-                    <button
-                      key={interest}
-                      type="button"
-                      onClick={() => removeInterest(interest)}
-                      className="rounded-full bg-emerald-50 px-4 py-2 text-base font-bold text-emerald-700 ring-1 ring-emerald-100 transition-colors hover:bg-emerald-100"
-                    >
-                      {interest} ×
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <InterestSelector
+              suggestedInterests={suggestedInterests}
+              interests={interests}
+              inputValue={interestInput}
+              error={fieldErrors.interests}
+              onInputChange={(value) => {
+                setInterestInput(value);
+                clearFieldError("interests");
+              }}
+              onAddInterest={addInterest}
+              onRemoveInterest={removeInterest}
+            />
 
             <Textarea
               label="Bio"

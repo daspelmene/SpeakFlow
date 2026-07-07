@@ -109,3 +109,31 @@ async def test_get_notes_returns_only_targeted_notes(client: AsyncClient):
 
     await user1.aclose()
     await user2.aclose()
+
+async def test_create_note_after_room_finished_is_forbidden(client: AsyncClient):
+    """Finished rooms must not accept new live correction notes."""
+    user1, user2 = await setup_matching_users(client)
+
+    create_resp = await user1.post("/audio/create-room")
+    room_id = create_resp.json()["room_id"]
+
+    await user2.post("/audio/join-room", json={"room_id": room_id})
+
+    second_user_resp = await user2.get("/users/me")
+    second_user_id = second_user_resp.json()["id"]
+
+    leave_resp = await user1.post("/audio/leave-room")
+    assert leave_resp.status_code == 200
+
+    payload = {
+        "room_id": str(room_id),
+        "target_user_id": second_user_id,
+        "note_text": "This should not be saved after finish",
+    }
+    resp = await user1.post("/notes/create", json=payload)
+
+    assert resp.status_code == 403
+    assert "Room has already finished" in resp.json()["detail"]
+
+    await user1.aclose()
+    await user2.aclose()

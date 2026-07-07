@@ -21,7 +21,7 @@ type AudioRoomStateSnapshot = {
 
 type AudioRoomProps = {
   initialRoomId?: string;
-  showRoomCode?: boolean;
+  showStatusBadge?: boolean;
   onEnd?: () => void;
   onRoomStateChange?: (state: AudioRoomStateSnapshot) => void;
 };
@@ -54,7 +54,7 @@ function getParticipantLabel(participant: Participant) {
 
 export default function AudioRoom({
   initialRoomId,
-  showRoomCode = true,
+  showStatusBadge = true,
   onEnd,
   onRoomStateChange,
 }: AudioRoomProps) {
@@ -127,26 +127,17 @@ export default function AudioRoom({
           </p>
         </div>
 
-        <span
-          className={`inline-flex rounded-full px-4 py-2 text-sm font-black ${
-            statusClasses[status]
-          }`}
-        >
-          {statusLabels[status]}
-        </span>
+        {showStatusBadge && (
+          <span
+            className={`inline-flex rounded-full px-4 py-2 text-sm font-black ${
+              statusClasses[status]
+            }`}
+          >
+            {statusLabels[status]}
+          </span>
+        )}
       </div>
 
-      {showRoomCode && roomId && (
-        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <p className="text-xs font-black uppercase tracking-wide text-slate-400">
-            Room ID
-          </p>
-
-          <p className="mt-1 break-all font-mono text-lg font-black text-slate-950">
-            {roomId}
-          </p>
-        </div>
-      )}
 
       {participants.length > 0 && (
         <div className="mt-5 space-y-3">
@@ -157,7 +148,11 @@ export default function AudioRoom({
           {participants.map((participant) => (
             <div
               key={participant.slot}
-              className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3"
+              className={`flex items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition-colors ${
+                participant.muted
+                  ? "border-red-200 bg-red-50"
+                  : "border-slate-200 bg-white"
+              }`}
             >
               <div>
                 <p className="text-base font-black text-slate-900">
@@ -173,11 +168,11 @@ export default function AudioRoom({
               <span
                 className={`rounded-full px-3 py-1 text-xs font-black ${
                   participant.muted
-                    ? "bg-red-100 text-red-700"
+                    ? "bg-red-600 text-white shadow-sm shadow-red-100"
                     : "bg-emerald-100 text-emerald-700"
                 }`}
               >
-                {participant.muted ? "Muted" : "Microphone active"}
+                {participant.muted ? "Muted microphone" : "Microphone active"}
               </span>
             </div>
           ))}
