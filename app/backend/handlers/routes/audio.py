@@ -22,6 +22,7 @@ from schemas.room import (
     ActiveRoomResponse,
     UserProfileSummary,
 )
+from uuid import UUID
 from utils.audio_ws import ws_audio_service
 from utils.jwt import get_current_user, decode_token
 from models.user import User
@@ -150,6 +151,8 @@ async def create_room(
         str(room.room_id),
         user.fullname,
         invited_user.fullname,
+        creator_user_id=user.id,
+        invited_user_id=invited_user.id,
     )
     logger.info(f"Room {room.room_id} registered in WebSocket service")
 
@@ -225,6 +228,8 @@ async def invite_by_email(
         str(room.room_id),
         user.fullname,
         invited_user.fullname,
+        creator_user_id=user.id,
+        invited_user_id=invited_user.id,
     )
     logger.info(f"Room {room.room_id} registered in WebSocket service")
 
@@ -291,7 +296,7 @@ async def join_room(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Room not found or you are not invited to this room",
         )
-
+    room_str = str(room.room_id)
     logger.info(
         f"User {user.id} ({user.fullname}) successfully joined room {data.room_id} "
         f"as user2 (invited)"
@@ -299,15 +304,18 @@ async def join_room(
 
     # Ensure room is registered in WebSocket service
     # (should already be from create-room, but let's be safe)
-    room_str = str(room.room_id)
     if room_str not in ws_audio_service.rooms:
         logger.info(f"Room {room_str} not in WebSocket service, registering now")
+
         creator = await db.users.get_user_by_id(room.user_creator_id)
         creator_name = creator.fullname if creator else "Creator"
+
         ws_audio_service.register_room(
             room_str,
             creator_name,
             user.fullname,
+            creator_user_id=room.user_creator_id,
+            invited_user_id=room.invited_user_id,
         )
 
     # Get role for invited user (default: learner)
@@ -349,11 +357,16 @@ async def leave_room(
     logger.info(f"WebSocket connections cleaned up for room {room_id_str}")
 
     # Delete the room from database
-    deleted = await db.rooms.delete_room(room.room_id)
-    if deleted:
-        logger.info(f"Room {room_id_str} deleted from database")
+    finished = await db.rooms.finish_room(room.room_id)
+    if finished:
+        logger.info(f"Room {room_id_str} marked as finished")
     else:
-        logger.warning(f"Failed to delete room {room_id_str} from database")
+        logger.warning(f"Failed to mark room {room_id_str} as finished")
+
+    await ws_audio_service.end_room(
+        room_id_str,
+        reason="One participant left the room",
+    )
 
     return MessageResponse(message="Successfully left the room")
 
@@ -417,60 +430,111 @@ async def audio_websocket(
     websocket: WebSocket,
     room_id: str,
     token: str = Query(..., description="JWT access token for authentication"),
+    db: Database = Depends(Database.get_db),
 ):
-    """WebSocket endpoint for audio room.
-
-    Handles both:
-      - Text frames: signaling messages (JSON)
-      - Binary frames: audio data (Opus/WebM chunks)
-
-    Flow:
-      1. Client connects with ?token=<jwt>
-      2. Server authenticates and validates room membership
-      3. Client sends: signaling (text), audio (binary)
-      4. Server forwards audio binary frames to other participant
-
-    Supported signaling messages:
-      - { type: "mute", muted: true/false }
-      - { type: "switch-roles" }
-    """
     logger.info(f"WebSocket connection attempt for room {room_id}")
 
-    # Authenticate via JWT token
     try:
         payload = decode_token(token)
         user_id = payload.get("sub")
+
         if not user_id:
             logger.warning("WebSocket auth failed: no subject in token")
             await websocket.close(code=4001, reason="Invalid token: no subject")
             return
+
         user_id = int(user_id)
+
         logger.info(f"WebSocket authenticated for user {user_id} in room {room_id}")
     except HTTPException:
         logger.warning("WebSocket auth failed: HTTPException during token decode")
         await websocket.close(code=4001, reason="Authentication failed")
         return
-    except Exception as e:
-        logger.warning(f"WebSocket auth failed: {e}")
+    except Exception as error:
+        logger.warning(f"WebSocket auth failed: {error}")
         await websocket.close(code=4001, reason="Authentication failed")
         return
 
-    # Accept the connection AFTER successful auth
     await websocket.accept()
+
     logger.info(f"WebSocket accepted for user {user_id} in room {room_id}")
 
-    # Register in WebSocket service
+    try:
+        room_uuid = UUID(room_id)
+    except ValueError:
+        await websocket.send_json({"type": "error", "message": "Invalid room id"})
+        await websocket.close(code=4004, reason="Invalid room id")
+        return
+
+    room = await db.rooms.get_room_by_id(room_uuid)
+
+    if room is None or room.is_finished:
+        await websocket.send_json({"type": "error", "message": "Room not found"})
+        await websocket.close(code=4004, reason="Room not found")
+        return
+
+    if not room.is_invited_accepted and user_id != room.user_creator_id:
+        await websocket.send_json({"type": "error", "message": "Room is not active"})
+        await websocket.close(code=4003, reason="Room is not active")
+        return
+
+    if user_id not in (room.user_creator_id, room.invited_user_id):
+        ws_room = ws_audio_service.rooms.get(room_id)
+
+        if ws_room and ws_room.get("user1") is not None and ws_room.get("user2") is not None:
+            await websocket.send_json({"type": "error", "message": "Room is full"})
+            await websocket.close(code=4004, reason="Room is full")
+            return
+
+        await websocket.send_json(
+            {"type": "error", "message": "Not a participant of this room"}
+        )
+        await websocket.close(code=4003, reason="Not a participant of this room")
+        return
+
+    is_participant = user_id in (room.user_creator_id, room.invited_user_id)
+
+    if not is_participant:
+        ws_room = ws_audio_service.rooms.get(room_id)
+
+        if ws_room and ws_room.get("user1") and ws_room.get("user2"):
+            await websocket.send_json({"type": "error", "message": "Room is full"})
+            await websocket.close(code=4004, reason="Room is full")
+            return
+
+        await websocket.send_json(
+            {"type": "error", "message": "Not a participant of this room"}
+        )
+        await websocket.close(code=4003, reason="Not a participant of this room")
+        return
+
+    if room_id not in ws_audio_service.rooms:
+        creator = await db.users.get_user_by_id(room.user_creator_id)
+        invited = await db.users.get_user_by_id(room.invited_user_id)
+
+        ws_audio_service.register_room(
+            room_id,
+            creator.fullname if creator else "Creator",
+            invited.fullname if invited else "Invited",
+            creator_user_id=room.user_creator_id,
+            invited_user_id=room.invited_user_id,
+        )
+
+        logger.info(f"Restored WebSocket room {room_id} from database")
+
     try:
         result = await ws_audio_service.ws_connect(
-            room_id, str(user_id), websocket
+            room_id,
+            str(user_id),
+            websocket,
         )
-    except HTTPException as e:
-        logger.warning(f"WebSocket connection rejected: {e.detail}")
-        await websocket.send_json({"type": "error", "message": e.detail})
-        await websocket.close(code=4004, reason=e.detail)
+    except HTTPException as error:
+        logger.warning(f"WebSocket connection rejected: {error.detail}")
+        await websocket.send_json({"type": "error", "message": error.detail})
+        await websocket.close(code=4004, reason=error.detail)
         return
-    except Exception as e:
-        logger.error(f"WebSocket connection error: {e}")
+    except Exception as error:
+        logger.error(f"WebSocket connection error: {error}")
         await websocket.close(code=4000, reason="Internal error")
         return
 
@@ -485,12 +549,11 @@ async def audio_websocket(
         f"(reconnect={is_reconnect})"
     )
 
-    # For new connections (not reconnect), send room-state
-    # (reconnect already sends it in ws_connect)
     if not is_reconnect:
         room_info = ws_audio_service.get_room_info(room_id)
         participants = room_info.get("participants", []) if room_info else []
         roles = room_info.get("roles", {}) if room_info else {}
+
         await websocket.send_json(
             {
                 "type": "room-state",
@@ -502,17 +565,16 @@ async def audio_websocket(
                 "participants": participants,
             }
         )
+
         logger.info(
             f"room-state sent to {user_name}: slot={user_slot}, "
             f"role={user_role}, participants={len(participants)}"
         )
 
-    # Message loop — handle BOTH text and binary frames
     try:
         while True:
             message = await websocket.receive()
 
-            # Check for disconnect message type
             if message.get("type") == "websocket.disconnect":
                 logger.info(
                     f"WebSocket disconnect message received for {user_name} ({user_slot})"
@@ -520,7 +582,6 @@ async def audio_websocket(
                 break
 
             if "text" in message:
-                # Signaling message (JSON)
                 try:
                     data = json.loads(message["text"])
                 except json.JSONDecodeError:
@@ -531,24 +592,26 @@ async def audio_websocket(
                     continue
 
                 await ws_audio_service.handle_ws_message(room_id, user_slot, data)
+
                 logger.debug(
                     f"WS message from {user_slot} ({user_name}): "
                     f"type={data.get('type', '?')}"
                 )
 
             elif "bytes" in message:
-                # Audio frame (binary) — forward to other participant
                 await ws_audio_service.handle_audio_frame(
-                    room_id, user_slot, message["bytes"]
+                    room_id,
+                    user_slot,
+                    message["bytes"],
                 )
 
     except WebSocketDisconnect:
         logger.info(
             f"WebSocket disconnected: {user_name} ({user_slot}) from room {room_id}"
         )
-    except Exception as e:
+    except Exception as error:
         logger.error(
-            f"WebSocket error for {user_slot} ({user_name}) in room {room_id}: {e}",
+            f"WebSocket error for {user_slot} ({user_name}) in room {room_id}: {error}",
             exc_info=True,
         )
     finally:

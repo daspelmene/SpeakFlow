@@ -1,5 +1,7 @@
+from typing import Literal
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException
-from handlers.routes.audio import ws_audio_service as audio_service
 
 from models.user import User
 from schemas.live_correction_note import (
@@ -8,8 +10,6 @@ from schemas.live_correction_note import (
 )
 from storage.database import Database
 from utils.jwt import get_current_user
-
-from uuid import UUID
 
 router = APIRouter(
     prefix="/notes",
@@ -30,8 +30,9 @@ async def create_note(
 
     if room is None:
         raise HTTPException(status_code=404, detail="Room not found")
-    
+
     target_user = await db.users.get_user_by_id(data.target_user_id)
+
     if target_user is None:
         raise HTTPException(status_code=404, detail="Target user not found")
 
@@ -49,8 +50,7 @@ async def create_note(
             status_code=400,
             detail="Target user is not a participant of this room",
         )
-    
-    
+
     return await db.live_correction_notes.create_note(
         {
             "room_id": data.room_id,
@@ -66,14 +66,19 @@ async def create_note(
     response_model=list[LiveCorrectionNoteResponse],
 )
 async def get_notes(
+    scope: Literal["received", "authored"] = "received",
     db: Database = Depends(Database.get_db),
     user: User = Depends(get_current_user),
 ):
-    return await db.live_correction_notes.get_notes_by_user(user.id)
+    if scope == "authored":
+        return await db.live_correction_notes.get_notes_by_author(user.id)
+
+    return await db.live_correction_notes.get_notes_by_target_user(user.id)
+
 
 @router.get(
     "/rooms/{room_id}/mine",
-    response_model=list[LiveCorrectionNoteResponse]
+    response_model=list[LiveCorrectionNoteResponse],
 )
 async def get_my_notes_in_room(
     room_id: UUID,
@@ -93,7 +98,7 @@ async def get_my_notes_in_room(
 
     if user.id not in (room.user_creator_id, room.invited_user_id):
         raise HTTPException(status_code=403, detail="Not a participant of this room")
-    
+
     return await db.live_correction_notes.get_notes_by_author_and_room(
         room_id=room_id,
         author_id=user.id,

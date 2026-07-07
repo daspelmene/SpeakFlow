@@ -29,21 +29,27 @@ class WSAudioService:
     # Room management (WebSocket level)
     # ------------------------------------------------------------------
 
-    def register_room(self, room_id: str, creator_name: str, invited_name: str):
-        """Register a room for WebSocket tracking.
-
-        Default roles: creator = helper, invited = learner.
-        """
+    def register_room(
+        self,
+        room_id: str,
+        creator_name: str,
+        invited_name: str,
+        creator_user_id: int | None = None,
+        invited_user_id: int | None = None,
+    ):
         logger.info(
             f"Registering room {room_id} for WebSocket: "
             f"creator={creator_name} (helper), invited={invited_name} (learner)"
         )
+
         self.rooms[room_id] = {
-            "user1": None,  # Creator (default helper)
-            "user2": None,  # Invited (default learner)
+            "user1": None,
+            "user2": None,
             "cleaning_up": False,
             "creator_name": creator_name,
             "invited_name": invited_name,
+            "creator_user_id": str(creator_user_id) if creator_user_id is not None else None,
+            "invited_user_id": str(invited_user_id) if invited_user_id is not None else None,
             "roles": {
                 "user1": "helper",
                 "user2": "learner",
@@ -51,12 +57,34 @@ class WSAudioService:
             "created_at": datetime.now(),
         }
 
+    async def end_room(self, room_id: str, reason: str = "Room ended"):
+        room = self.rooms.get(room_id)
+
+        if not room:
+            logger.info(f"[ROOM-END] Room {room_id} is not in WebSocket memory")
+            return
+
+        for slot in ("user1", "user2"):
+            user_data = room.get(slot)
+
+            if user_data and user_data.get("ws"):
+                await self._ws_send(
+                    user_data["ws"],
+                    {
+                        "type": "room-ended",
+                        "reason": reason,
+                    },
+                )
+
+        await self.cleanup_room(room_id)
+        
     async def ws_connect(
         self, room_id: str, user_id: str, websocket: WebSocket
     ) -> dict:
         """Register a WebSocket connection for a user in a room.
 
-        Validates that the user is a participant of the room.
+        The slot is assigned from database-backed room metadata:
+        creator -> user1, invited user -> user2.
         """
         room_id = room_id.strip()
 
@@ -66,17 +94,16 @@ class WSAudioService:
 
         room = self.rooms[room_id]
 
-        # Check if user is reconnecting to an existing slot
+        # Reconnect to an existing slot.
         for slot in ("user1", "user2"):
             existing = room.get(slot)
-            if existing and existing.get("user_id") == user_id:
-                logger.info(
-                    f"User {user_id} reconnecting as {slot} in room {room_id}"
-                )
 
-                # Cancel pending deferred disconnect for this slot
+            if existing and existing.get("user_id") == user_id:
+                logger.info(f"User {user_id} reconnecting as {slot} in room {room_id}")
+
                 pending = self._pending_disconnects.get(room_id, {})
                 pending_task = pending.pop(slot, None)
+
                 if pending_task and not pending_task.done():
                     pending_task.cancel()
                     logger.info(
@@ -95,7 +122,6 @@ class WSAudioService:
                 other = room.get(other_slot)
                 other_muted = other.get("muted", False) if other else False
 
-                # Notify the reconnecting user about current state first
                 await self._ws_send(
                     websocket,
                     {
@@ -108,25 +134,20 @@ class WSAudioService:
                         "participants": self._get_participants(room_id),
                     },
                 )
-                logger.info(
-                    f"Sent fresh room-state to reconnecting {user_name} "
-                    f"(slot={slot}, role={user_role})"
-                )
 
-                # Notify the other user about reconnection
                 if other and other.get("ws") and not other.get("disconnecting"):
-                    # Send peer-reconnected to trigger audio restart on both sides
                     await self._ws_send(
                         other["ws"],
                         {
                             "type": "peer-reconnected",
                             "userSlot": slot,
                             "userName": user_name,
+                            "userId": int(user_id),
                             "role": user_role,
                             "muted": existing.get("muted", False),
                         },
                     )
-                    # Also notify the reconnecting user that peer needs audio restart
+
                     await self._ws_send(
                         websocket,
                         {
@@ -134,10 +155,6 @@ class WSAudioService:
                             "peerSlot": other_slot,
                             "peerMuted": other_muted,
                         },
-                    )
-                    logger.info(
-                        f"Sent peer-reconnected to {other_slot} and "
-                        f"audio-restart-required to {slot}"
                     )
 
                 return {
@@ -148,37 +165,50 @@ class WSAudioService:
                     "role": user_role,
                 }
 
-        # New connection - try to assign to correct slot
-        if room["user1"] is None:
+        # New connection: assign slot by database-backed ids.
+        creator_user_id = room.get("creator_user_id")
+        invited_user_id = room.get("invited_user_id")
+
+        if creator_user_id == user_id:
             user_slot = "user1"
             user_name = room.get("creator_name", "Creator")
-        elif room["user2"] is None:
+        elif invited_user_id == user_id:
+            user_slot = "user2"
+            user_name = room.get("invited_name", "Invited")
+        elif creator_user_id is None and room["user1"] is None:
+            user_slot = "user1"
+            user_name = room.get("creator_name", "Creator")
+        elif invited_user_id is None and room["user2"] is None:
             user_slot = "user2"
             user_name = room.get("invited_name", "Invited")
         else:
-            logger.warning(f"Room {room_id} is full, rejecting user {user_id}")
+            logger.warning(f"User {user_id} is not a participant of room {room_id}")
             raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, "Room is full"
+                status.HTTP_403_FORBIDDEN,
+                "Not a participant of this room",
+            )
+
+        if room.get(user_slot) is not None:
+            logger.warning(f"Slot {user_slot} is already occupied in room {room_id}")
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "Room is full",
             )
 
         user_role = room["roles"].get(user_slot, "learner")
+
         room[user_slot] = {
             "ws": websocket,
-            "name": user_name,
             "user_id": user_id,
+            "name": user_name,
+            "role": user_role,
             "muted": False,
             "disconnecting": False,
-            "role": user_role,
         }
 
-        logger.info(
-            f"User {user_name} (id={user_id}) joined as {user_slot} "
-            f"({user_role}) in room {room_id}"
-        )
-
-        # Notify the other user if they're already connected
         other_slot = "user2" if user_slot == "user1" else "user1"
         other = room.get(other_slot)
+
         if other and other.get("ws") and not other.get("disconnecting"):
             await self._ws_send(
                 other["ws"],
@@ -186,11 +216,11 @@ class WSAudioService:
                     "type": "user-joined",
                     "userSlot": user_slot,
                     "userName": user_name,
+                    "userId": int(user_id),
                     "role": user_role,
                     "muted": False,
                 },
             )
-            logger.info(f"Sent user-joined to {other_slot} for {user_slot}")
 
         return {
             "status": "joined",
@@ -413,10 +443,10 @@ class WSAudioService:
                 await self._ws_send(
                     other["ws"],
                     {
-                        "type": "user-left",
+                        "type": "peer-disconnected",
                         "userSlot": user_slot,
                         "userName": user_name,
-                    },
+                    }
                 )
 
             # Clear slot
@@ -496,21 +526,31 @@ class WSAudioService:
     # ------------------------------------------------------------------
 
     def _get_participants(self, room_id: str) -> list[dict]:
-        """Get list of participants with their current state."""
         room = self.rooms.get(room_id)
+
         if not room:
             return []
 
         participants = []
+
         for slot in ("user1", "user2"):
             ud = room.get(slot)
+
             if ud and not ud.get("disconnecting"):
-                participants.append({
-                    "slot": slot,
-                    "name": ud.get("name", "Unknown"),
-                    "role": room["roles"].get(slot, "learner"),
-                    "muted": ud.get("muted", False),
-                })
+                raw_user_id = ud.get("user_id")
+
+                participants.append(
+                    {
+                        "slot": slot,
+                        "name": ud.get("name", "Unknown"),
+                        "userId": int(raw_user_id)
+                        if str(raw_user_id).isdigit()
+                        else None,
+                        "role": room["roles"].get(slot, "learner"),
+                        "muted": ud.get("muted", False),
+                    }
+                )
+
         return participants
 
     def get_room_info(self, room_id: str) -> dict | None:

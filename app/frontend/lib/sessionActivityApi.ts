@@ -15,26 +15,42 @@ export type CreateLiveCorrectionNotePayload = {
   note_text: string;
 };
 
+export type SessionActivityScope = "received" | "authored";
+
+export type SessionFeedbackAuthorRole = "helper" | "learner";
+
 export type SessionFeedback = {
+  id: number;
+  room_id: string;
+  author_id: number;
+  target_user_id: number;
+  author_role: SessionFeedbackAuthorRole;
   feedback: string;
-  id?: number;
-  room_id?: string;
-  author_id?: number;
-  target_user_id?: number;
-  created_at?: string;
+  created_at: string;
 };
 
 export type CreateSessionFeedbackPayload = {
   room_id: string;
   target_user_id: number;
+  author_role: SessionFeedbackAuthorRole;
   feedback: string;
 };
 
-export function getLiveCorrectionNotes() {
-  return request<LiveCorrectionNote[]>("/api/v1/notes", {
+function getScopeQuery(scope: SessionActivityScope) {
+  return `?scope=${encodeURIComponent(scope)}`;
+}
+
+export function getLiveCorrectionNotes(
+  scope: SessionActivityScope = "received",
+) {
+  return request<LiveCorrectionNote[]>(`/api/v1/notes${getScopeQuery(scope)}`, {
     method: "GET",
     headers: getAuthHeaders(),
   });
+}
+
+export function getAuthoredLiveCorrectionNotes() {
+  return getLiveCorrectionNotes("authored");
 }
 
 export function createLiveCorrectionNote(
@@ -47,24 +63,26 @@ export function createLiveCorrectionNote(
   });
 }
 
-export function getSessionFeedback() {
-  return request<SessionFeedback[]>("/api/v1/feedback", {
-    method: "GET",
-    headers: getAuthHeaders(),
-  });
+export function getSessionFeedback(
+  scope: SessionActivityScope = "received",
+) {
+  return request<SessionFeedback[]>(
+    `/api/v1/feedback${getScopeQuery(scope)}`,
+    {
+      method: "GET",
+      headers: getAuthHeaders(),
+    },
+  );
 }
 
-export async function createSessionFeedback(
-  payload: CreateSessionFeedbackPayload,
-) {
-  const response = await request<SessionFeedback>("/api/v1/feedback/create", {
+export function getAuthoredSessionFeedback() {
+  return getSessionFeedback("authored");
+}
+
+export function createSessionFeedback(payload: CreateSessionFeedbackPayload) {
+  return request<SessionFeedback>("/api/v1/feedback/create", {
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify(payload),
   });
-
-  return {
-    ...payload,
-    ...response,
-  };
 }

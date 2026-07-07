@@ -1,4 +1,14 @@
-import { getAccessToken } from "@/lib/auth";
+import { clearTokens, getAccessToken } from "@/lib/auth";
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
 
 export type TokenResponse = {
   access_token: string;
@@ -38,6 +48,25 @@ export type UpdateProfilePayload = {
   bio?: string | null;
 };
 
+export function isUnauthorizedError(error: unknown) {
+  if (error instanceof ApiError) {
+    return error.status === 401 || error.status === 403;
+  }
+
+  if (error instanceof Error) {
+    const message = error.message.toLowerCase();
+
+    return (
+      message.includes("invalid token") ||
+      message.includes("not authenticated") ||
+      message.includes("unauthorized") ||
+      message.includes("forbidden")
+    );
+  }
+
+  return false;
+}
+
 export async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -57,10 +86,18 @@ export async function request<T>(
       const errorData = await response.json();
       message = errorData.detail || message;
     } catch {
-      // If backend does not return JSON, use default message.
+      // Use the default error message if backend does not return JSON.
     }
 
-    throw new Error(message);
+    if (response.status === 401 || response.status === 403) {
+      clearTokens();
+    }
+
+    throw new ApiError(message, response.status);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return response.json() as Promise<T>;
@@ -70,7 +107,7 @@ export function getAuthHeaders() {
   const token = getAccessToken();
 
   if (!token) {
-    throw new Error("User is not authenticated");
+    throw new ApiError("User is not authenticated", 401);
   }
 
   return {
