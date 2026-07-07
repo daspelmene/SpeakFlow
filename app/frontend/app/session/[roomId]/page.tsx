@@ -17,6 +17,7 @@ import {
   createLiveCorrectionNote,
   createSessionFeedback,
   getAuthoredLiveCorrectionNotes,
+  getLiveCorrectionNotes,
   getAuthoredSessionFeedback,
   type LiveCorrectionNote,
   type SessionFeedback,
@@ -108,6 +109,34 @@ function getStatusLabel(status: RoomStatus) {
   return "Finished";
 }
 
+function getStatusBadgeVariant(status: RoomStatus) {
+  if (status === "active") {
+    return "success" as const;
+  }
+
+  if (status === "ended") {
+    return "neutral" as const;
+  }
+
+  if (status === "waiting" || status === "connecting" || status === "creating") {
+    return "info" as const;
+  }
+
+  return "neutral" as const;
+}
+
+function getCallStatusTitle(status: RoomStatus) {
+  if (status === "active") {
+    return "Active call";
+  }
+
+  if (status === "ended") {
+    return "Finished";
+  }
+
+  return getStatusLabel(status);
+}
+
 function getFeedbackAuthorRole(role: SessionRole) {
   if (role === "helper" || role === "learner") {
     return role;
@@ -140,6 +169,32 @@ function getFeedbackRoleBadgeVariant(authorRole: string) {
   return "neutral" as const;
 }
 
+async function loadRoomSessionActivity(roomId: string) {
+  const [loadedNotes, loadedReceivedNotes, loadedFeedback] = await Promise.all([
+    getAuthoredLiveCorrectionNotes(),
+    getLiveCorrectionNotes("received"),
+    getAuthoredSessionFeedback(),
+  ]);
+
+  const roomNotes = Array.isArray(loadedNotes)
+    ? loadedNotes.filter((note) => note.room_id === roomId)
+    : [];
+
+  const roomReceivedNotes = Array.isArray(loadedReceivedNotes)
+    ? loadedReceivedNotes.filter((note) => note.room_id === roomId)
+    : [];
+
+  const roomFeedback = Array.isArray(loadedFeedback)
+    ? loadedFeedback.filter((item) => item.room_id === roomId)
+    : [];
+
+  return {
+    roomNotes,
+    roomReceivedNotes,
+    roomFeedback,
+  };
+}
+
 export default function SessionRoomPage() {
   const params = useParams<{ roomId: string }>();
   const roomId = params.roomId;
@@ -154,6 +209,7 @@ export default function SessionRoomPage() {
   const [noteText, setNoteText] = useState("");
   const [feedbackText, setFeedbackText] = useState("");
   const [notes, setNotes] = useState<LiveCorrectionNote[]>([]);
+  const [receivedNotes, setReceivedNotes] = useState<LiveCorrectionNote[]>([]);
   const [feedbackItems, setFeedbackItems] = useState<SessionFeedback[]>([]);
 
   const [isSavingNote, setIsSavingNote] = useState(false);
@@ -268,24 +324,15 @@ export default function SessionRoomPage() {
     const timeoutId = window.setTimeout(() => {
       async function loadCurrentSessionActivity() {
         try {
-          const [loadedNotes, loadedFeedback] = await Promise.all([
-            getAuthoredLiveCorrectionNotes(),
-            getAuthoredSessionFeedback(),
-          ]);
+          const { roomNotes, roomReceivedNotes, roomFeedback } =
+            await loadRoomSessionActivity(roomId);
 
           if (!isMounted) {
             return;
           }
 
-          const roomNotes = Array.isArray(loadedNotes)
-            ? loadedNotes.filter((note) => note.room_id === roomId)
-            : [];
-
-          const roomFeedback = Array.isArray(loadedFeedback)
-            ? loadedFeedback.filter((item) => item.room_id === roomId)
-            : [];
-
           setNotes(roomNotes);
+          setReceivedNotes(roomReceivedNotes);
           setFeedbackItems(roomFeedback);
         } catch {
           if (!isMounted) {
@@ -293,6 +340,7 @@ export default function SessionRoomPage() {
           }
 
           setNotes([]);
+          setReceivedNotes([]);
           setFeedbackItems([]);
         }
       }
@@ -390,6 +438,11 @@ export default function SessionRoomPage() {
     isSessionActive ||
     isSessionEnded;
 
+  const canWriteLiveNotes =
+    shouldShowSessionContent && currentRole === "helper" && !isSessionEnded;
+  const shouldShowFinalNotes = shouldShowSessionContent && isSessionEnded;
+  const hasFinalNotes = receivedNotes.length > 0 || notes.length > 0;
+
   useEffect(() => {
     if (!isSessionReady && !isSessionActive && !isSessionEnded) {
       return;
@@ -404,6 +457,40 @@ export default function SessionRoomPage() {
       window.clearTimeout(timeoutId);
     };
   }, [isSessionActive, isSessionEnded, isSessionReady, roomId]);
+
+  useEffect(() => {
+    if (!isSessionEnded) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const timeoutId = window.setTimeout(() => {
+      async function refreshFinalSessionActivity() {
+        try {
+          const { roomNotes, roomReceivedNotes, roomFeedback } =
+            await loadRoomSessionActivity(roomId);
+
+          if (!isMounted) {
+            return;
+          }
+
+          setNotes(roomNotes);
+          setReceivedNotes(roomReceivedNotes);
+          setFeedbackItems(roomFeedback);
+        } catch {
+          // Keep already loaded activity if the final refresh fails.
+        }
+      }
+
+      void refreshFinalSessionActivity();
+    }, 0);
+
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [isSessionEnded, roomId]);
 
   const handleRoomStateChange = useCallback((state: AudioRoomStateSnapshot) => {
     setAudioStatus(state.status);
@@ -424,7 +511,7 @@ export default function SessionRoomPage() {
 
     const text = noteText.trim();
 
-    if (!text || !targetUserId) {
+    if (!text || !targetUserId || isSessionEnded) {
       return;
     }
 
@@ -498,27 +585,21 @@ export default function SessionRoomPage() {
         </p>
       </div>
 
-      <div className="mb-6 grid gap-4 lg:grid-cols-2">
-        <Card className="p-5">
-          <p className="text-xs font-black uppercase tracking-wide text-slate-400">
-            Room status
-          </p>
+      <Card className="mb-6 p-5">
+        <Badge variant={getStatusBadgeVariant(audioStatus)}>
+          Session overview
+        </Badge>
 
-          <p className="mt-2 text-2xl font-black text-slate-950">
-            {getStatusLabel(audioStatus)}
-          </p>
-        </Card>
+        <h2 className="mt-4 text-2xl font-black tracking-tight text-slate-950">
+          {getCallStatusTitle(audioStatus)} · {getRoleTitle(currentRole)}
+        </h2>
 
-        <Card className="p-5">
-          <p className="text-xs font-black uppercase tracking-wide text-slate-400">
-            Your role
-          </p>
-
-          <p className="mt-2 text-2xl font-black text-indigo-700">
-            {getRoleTitle(currentRole)}
-          </p>
-        </Card>
-      </div>
+        <p className="mt-2 max-w-3xl text-base leading-7 text-slate-600">
+          {isSessionEnded
+            ? "The room is finished. Live correction notes are closed, but saved session notes stay available below."
+            : getRoleDescription(currentRole)}
+        </p>
+      </Card>
 
       {sessionError && (
         <div className="mb-6 rounded-2xl bg-red-50 px-5 py-4 text-base font-bold text-red-700 ring-1 ring-red-100">
@@ -613,33 +694,13 @@ export default function SessionRoomPage() {
         </div>
 
         <div className="space-y-6">
-          <Card className="p-5">
-            <Badge variant="success">Role guide</Badge>
-
-            <h2 className="mt-3 text-xl font-black tracking-tight text-slate-950">
-              {getRoleTitle(currentRole)}
-            </h2>
-
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              {getRoleDescription(currentRole)}
-            </p>
-
-            <div className="mt-4 rounded-2xl bg-slate-50 p-4">
-              <p className="text-sm font-bold leading-6 text-slate-500">
-                Role switching is intentionally disabled for now. It should be
-                synchronized by the backend through a WebSocket event to prevent
-                both users from becoming helpers or learners at the same time.
-              </p>
-            </div>
-          </Card>
-
           <AudioRoom
             initialRoomId={roomId}
-            showRoomCode={false}
+            showStatusBadge={false}
             onRoomStateChange={handleRoomStateChange}
           />
 
-          {shouldShowSessionContent && currentRole === "helper" && (
+          {canWriteLiveNotes && (
             <Card className="p-5">
               <Badge variant="warning">Live notes</Badge>
 
@@ -691,18 +752,87 @@ export default function SessionRoomPage() {
             </Card>
           )}
 
-          {shouldShowSessionContent && currentRole === "learner" && (
+          {shouldShowSessionContent &&
+            currentRole === "learner" &&
+            !isSessionEnded && (
+              <Card className="p-5">
+                <Badge variant="info">Correction notes</Badge>
+
+                <h2 className="mt-3 text-xl font-black tracking-tight text-slate-950">
+                  Your helper writes notes
+                </h2>
+
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  During this phase, your partner acts as the helper and can save
+                  correction notes about your speaking practice.
+                </p>
+              </Card>
+            )}
+
+          {shouldShowFinalNotes && (
             <Card className="p-5">
-              <Badge variant="info">Correction notes</Badge>
+              <Badge variant={hasFinalNotes ? "success" : "neutral"}>
+                Final notes
+              </Badge>
 
               <h2 className="mt-3 text-xl font-black tracking-tight text-slate-950">
-                Your helper writes notes
+                Session correction notes
               </h2>
 
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                During this phase, your partner acts as the helper and can save
-                correction notes about your speaking practice.
+                Live note editing is closed for this finished session. Saved
+                correction notes are shown here for review.
               </p>
+
+              {hasFinalNotes ? (
+                <div className="mt-4 space-y-4">
+                  {receivedNotes.length > 0 && (
+                    <section>
+                      <p className="text-xs font-black uppercase tracking-wide text-emerald-700">
+                        Notes for you
+                      </p>
+
+                      <div className="mt-2 max-h-48 space-y-2 overflow-y-auto pr-2">
+                        {receivedNotes.map((note) => (
+                          <div
+                            key={note.id}
+                            className="rounded-2xl border border-emerald-100 bg-emerald-50 p-3"
+                          >
+                            <p className="text-sm font-bold leading-6 text-slate-800">
+                              {note.note_text}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+
+                  {notes.length > 0 && (
+                    <section>
+                      <p className="text-xs font-black uppercase tracking-wide text-slate-500">
+                        Notes you wrote
+                      </p>
+
+                      <div className="mt-2 max-h-48 space-y-2 overflow-y-auto pr-2">
+                        {notes.map((note) => (
+                          <div
+                            key={note.id}
+                            className="rounded-2xl border border-slate-200 bg-slate-50 p-3"
+                          >
+                            <p className="text-sm font-bold leading-6 text-slate-800">
+                              {note.note_text}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm font-bold text-slate-500">
+                  No final correction notes were saved for this session.
+                </p>
+              )}
             </Card>
           )}
 
