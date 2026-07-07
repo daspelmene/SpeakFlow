@@ -8,4 +8,5 @@ include:
   - local: 'ci/templates/jobs/build.yml'
   - local: 'ci/templates/jobs/lint.yml'
   - local: 'ci/templates/jobs/test.yml'
-  - local: 'ci/templates/jobs/deploy.yml'
+  - local: 'ci/templates/jobs/deploy-infrastructure.yml'
+  - local: 'ci/templates/jobs/deploy-applications.yml'

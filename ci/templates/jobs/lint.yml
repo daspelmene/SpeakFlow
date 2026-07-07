@@ -1,6 +1,5 @@
 lint-backend:python:
   stage: lint
-  allow_failure: true
   image: python:3.14.0-slim-trixie
 
   rules:
@@ -15,7 +14,6 @@ lint-backend:python:
 
 lint-frontend:node:
   stage: lint
-  allow_failure: true
   image: node:24-trixie-slim
 
   rules:
