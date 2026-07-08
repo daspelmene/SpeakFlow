@@ -5,9 +5,11 @@
 # Env
 .env
 .venv
+app/frontend/.env.local
 
 # Cache
 __pycache__/
+.next/
 app/frontend/node_modules
 .next
 

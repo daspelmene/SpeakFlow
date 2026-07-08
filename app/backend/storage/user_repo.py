@@ -1,9 +1,9 @@
 from collections.abc import Sequence
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from backend.models.user import User
+from models.user import User
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -19,6 +19,12 @@ class UserRepository:
 
     async def get_user_by_email(self, email: str) -> User | None:
         query = select(User).where(User.email == email)
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
+    async def get_user_by_email_insensitive(self, email: str) -> User | None:
+        """Look up a user by email ignoring case (e.g. for invitations)."""
+        query = select(User).where(func.lower(User.email) == email.lower())
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 

@@ -1,60 +1,104 @@
-import asyncio
-
+import os
+import subprocess
 import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+import asyncpg
+from httpx import AsyncClient
+from dotenv import load_dotenv
+from pathlib import Path
 
-from app.backend.config.config import settings
-from app.backend.main import app
-from app.backend.storage.database import Database
-from app.backend.storage.user_repo import UserRepository
-from app.tests.constants.user import REGISTER_DATA
+env_path = Path(__file__).resolve().parent / ".env"
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+else:
+    root_env = Path(__file__).resolve().parent.parent / ".env"
+    if root_env.exists():
+        load_dotenv(dotenv_path=root_env)
 
+POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "postgres")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "speakflow")
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
 
-@pytest.fixture(scope="session")
-def db_available():
-    async def _check():
-        try:
-            engine = create_async_engine(settings.DATABASE_URL)
-            async with engine.connect() as conn:
-                await conn.execute(text("SELECT 1"))
-            await engine.dispose()
-            return True
-        except Exception:
-            return False
+DATABASE_URL = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:5432/{POSTGRES_DB}"
+BASE_URL = os.getenv("API_BASE_URL", "http://backend:8000/api/v1")
 
-    return asyncio.run(_check())
+_migrations_applied = False
 
+async def ensure_table_exists():
+    global _migrations_applied
+    if _migrations_applied:
+        return
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        # Check for a table added in a recent migration
+        exists = await conn.fetchval(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='users')"
+        )
+        if not exists:
+            print("Applying migrations via alembic...")
+            backend_dir = Path(__file__).resolve().parent.parent / "backend"
+            result = subprocess.run(
+                ["alembic", "upgrade", "head"],
+                cwd=str(backend_dir),
+                capture_output=True,
+                text=True,
+                env=os.environ.copy(),
+            )
+            if result.returncode != 0:
+                raise RuntimeError("Migrations failed: " + result.stderr)
+            print("Migrations applied.")
+        _migrations_applied = True
+    finally:
+        await conn.close()
 
-@pytest_asyncio.fixture(autouse=True)
-async def _reset_engine():
-    Database.engine = None
-    Database.async_session_factory = None
+async def delete_all_users_async():
+    await ensure_table_exists()
+    conn = await asyncpg.connect(DATABASE_URL)
+    try:
+        await conn.execute("DELETE FROM users")
+    finally:
+        await conn.close()
+
+@pytest.fixture(scope="function", autouse=True)
+async def clean_db():
+    await delete_all_users_async()
     yield
 
+async def register_user(client: AsyncClient, email: str, password: str, fullname: str):
+    resp = await client.post("/auth/register", json={
+        "email": email,
+        "password": password,
+        "fullname": fullname,
+    })
+    resp.raise_for_status()
+    data = resp.json()
+    return data["access_token"], data["refresh_token"]
 
-@pytest_asyncio.fixture
-async def cleanup_user():
-    engine = create_async_engine(settings.DATABASE_URL)
-    factory = async_sessionmaker(
-        engine, expire_on_commit=False, class_=AsyncSession
-    )
-    async with factory() as session:
-        repo = UserRepository(session)
-        user = await repo.get_user_by_email(REGISTER_DATA["email"])
-        if user:
-            await session.delete(user)
-            await session.commit()
-    await engine.dispose()
-    yield
+@pytest.fixture(scope="function")
+async def client():
+    async with AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        yield client
 
+@pytest.fixture(scope="function")
+async def auth_client():
+    async with AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        email = "test@example.com"
+        password = "secret123"
+        fullname = "Test User"
+        access_token, _ = await register_user(client, email, password, fullname)
+        client.headers["Authorization"] = f"Bearer {access_token}"
+        client._test_user = {"email": email, "password": password, "fullname": fullname}
+        client.access_token = access_token
+        yield client
 
-@pytest_asyncio.fixture
-async def async_client(db_available, cleanup_user):
-    if not db_available:
-        pytest.skip("Database is not available")
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+@pytest.fixture(scope="function")
+async def second_user_client():
+    async with AsyncClient(base_url=BASE_URL, timeout=10.0) as client:
+        email = "second@example.com"
+        password = "secret456"
+        fullname = "Second User"
+        token, _ = await register_user(client, email, password, fullname)
+        client.headers["Authorization"] = f"Bearer {token}"
+        client._test_user = {"email": email, "password": password, "fullname": fullname}
+        client.access_token = token
         yield client
