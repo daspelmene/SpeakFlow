@@ -18,10 +18,28 @@ spec:
       labels:
         app: backend
     spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+
       containers:
       - name: backend
         image: docker.io/semyonnadutkin/speakflow-backend:latest
         imagePullPolicy: Always
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: true
+
+        volumeMounts:
+        - name: recordings
+          mountPath: /recordings
+        - name: tmp
+          mountPath: /tmp
 
         resources:
           requests:
@@ -32,6 +50,12 @@ spec:
             cpu: 500m
 
         env:
+        - name: DEEPSEEK_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: backend-secret
+              key: deepseek_api_key
+
         - name: JWT_ALGORITHM
           valueFrom:
             configMapKeyRef:
@@ -76,4 +100,12 @@ spec:
 
         ports:
         - containerPort: 8000
+
+      volumes:
+      - name: recordings
+        persistentVolumeClaim:
+          claimName: recordings-pvc
+      - name: tmp
+        emptyDir: {}
+
       restartPolicy: Always

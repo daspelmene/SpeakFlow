@@ -1,0 +1,36 @@
+deploy-backend:
+  stage: deploy-applications
+  extends: .ssh-job
+
+  rules:
+    - changes:
+      - app/backend/**/*
+      - app/backend/Dockerfile
+
+  script:
+    - |
+      ssh "$SSH_USER@$SSH_HOST" <<EOF
+      kubectl set image deployment/backend \
+        backend="$DOCKERHUB_USER/speakflow-backend:$CI_COMMIT_SHA" \
+        -n default
+      EOF
+
+
+deploy-frontend:
+  stage: deploy-applications
+  extends: .ssh-job
+
+  rules:
+    - changes:
+      - app/frontend/**/*
+      - app/frontend/Dockerfile
+
+  script:
+    - |
+      ssh "$SSH_USER@$SSH_HOST" <<EOF
+      kubectl set image deployment/frontend \
+        frontend="$DOCKERHUB_USER/speakflow-frontend:$CI_COMMIT_SHA" \
+        -n default
+
+      kubectl rollout status deployment/frontend -n default
+      EOF

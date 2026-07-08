@@ -1,0 +1,20 @@
+deploy-infrastructure:k8s:
+  stage: deploy-infrastructure
+  extends: .ssh-job
+
+  rules:
+    - changes:
+      - k8s/**/*
+
+  script:
+    - |
+      ssh "$SSH_USER@$SSH_HOST" <<EOF
+      if [ -d speakflow/.git ]; then
+        git -C speakflow fetch origin main
+        git -C speakflow reset --hard origin/main
+      else
+        git clone -b main "$REPOSITORY_URL" speakflow
+      fi
+      kubectl apply -k speakflow/k8s/base
+      kubectl rollout restart deployment -n default
+      EOF
