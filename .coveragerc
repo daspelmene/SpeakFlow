@@ -1,0 +1,19 @@
+[run]
+branch = True
+source = .
+sigterm = True
+
+omit =
+    alembic/*
+    */__init__.py
+    entrypoint.sh
+
+[report]
+show_missing = True
+skip_empty = True
+precision = 2
+
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise NotImplementedError
