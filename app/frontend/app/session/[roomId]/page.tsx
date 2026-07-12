@@ -24,8 +24,10 @@ import {
 } from "@/lib/sessionActivityApi";
 import { getSessionPartnerUserId } from "@/lib/sessionPartnerStorage";
 import {
+  getLearnerSessionTemplates,
   getSessionContentUnlocked,
   getSessionUiSnapshot,
+  saveLearnerSessionTemplates,
   saveSessionContentUnlocked,
   saveSessionUiSnapshot,
 } from "@/lib/sessionUiSnapshotStorage";
@@ -33,6 +35,7 @@ import {
   generateSessionTemplates,
   getSessionTemplates,
   type SessionTemplate,
+  type SessionTemplatesByLearnerSlot,
 } from "@/lib/sessionTemplateApi";
 
 type SessionRole = "helper" | "learner" | "unknown";
@@ -223,6 +226,9 @@ export default function SessionRoomPage() {
   const [sessionTemplate, setSessionTemplate] =
     useState<SessionTemplate | null>(null);
 
+  const [learnerTemplates, setLearnerTemplates] =
+    useState<SessionTemplatesByLearnerSlot | null>(null);
+
   const [wasSessionContentUnlocked, setWasSessionContentUnlocked] =
     useState(false);
 
@@ -281,6 +287,20 @@ export default function SessionRoomPage() {
 
     return () => {
       isMounted = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [roomId]);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      const savedLearnerTemplates = getLearnerSessionTemplates(roomId);
+
+      if (savedLearnerTemplates) {
+        setLearnerTemplates(savedLearnerTemplates);
+      }
+    }, 0);
+
+    return () => {
       window.clearTimeout(timeoutId);
     };
   }, [roomId]);
@@ -354,16 +374,6 @@ export default function SessionRoomPage() {
     };
   }, [roomId]);
 
-  const topicCards = useMemo(
-    () => sessionTemplate?.topic_cards ?? [],
-    [sessionTemplate],
-  );
-
-  const vocabularyHints = useMemo(
-    () => topicCards.flatMap((card) => card.vocabulary),
-    [topicCards],
-  );
-
   const targetUserId = useMemo(() => {
     const partner = participants.find(
       (participant) => participant.slot !== currentUserSlot,
@@ -375,6 +385,62 @@ export default function SessionRoomPage() {
   const currentRole = useMemo(
     () => serverRole ?? getRoleFromUserSlot(currentUserSlot),
     [serverRole, currentUserSlot],
+  );
+
+  const partnerSlot = useMemo(() => {
+    if (currentUserSlot === "user1") {
+      return "user2";
+    }
+
+    if (currentUserSlot === "user2") {
+      return "user1";
+    }
+
+    return null;
+  }, [currentUserSlot]);
+
+  const currentLearnerSlot = useMemo(() => {
+    if (currentRole === "learner") {
+      return currentUserSlot;
+    }
+
+    if (currentRole === "helper") {
+      return partnerSlot;
+    }
+
+    return null;
+  }, [currentRole, currentUserSlot, partnerSlot]);
+
+  const activeSessionTemplate = useMemo(() => {
+    if (currentLearnerSlot === "user1") {
+      return learnerTemplates?.user1_template ?? sessionTemplate;
+    }
+
+    if (currentLearnerSlot === "user2") {
+      return learnerTemplates?.user2_template ?? sessionTemplate;
+    }
+
+    return sessionTemplate;
+  }, [currentLearnerSlot, learnerTemplates, sessionTemplate]);
+
+  const topicCards = useMemo(
+    () => activeSessionTemplate?.topic_cards ?? [],
+    [activeSessionTemplate],
+  );
+
+  const activeTopicTitle = useMemo(() => {
+    const firstTopicCardTitle = topicCards[0]?.title?.trim();
+
+    if (firstTopicCardTitle) {
+      return firstTopicCardTitle;
+    }
+
+    return activeSessionTemplate?.title ?? "Loading session topic...";
+  }, [activeSessionTemplate, topicCards]);
+
+  const vocabularyHints = useMemo(
+    () => topicCards.flatMap((card) => card.vocabulary),
+    [topicCards],
   );
 
   useEffect(() => {
@@ -399,21 +465,17 @@ export default function SessionRoomPage() {
             sessionUserSlot === "user1" ? partnerUserId : currentUser.id;
 
           const generatedTemplates = await generateSessionTemplates({
+            room_id: roomId,
             user1_id: user1Id,
             user2_id: user2Id,
           });
 
-          const templateForCurrentUser =
-            sessionUserSlot === "user1"
-              ? generatedTemplates.user1_template
-              : generatedTemplates.user2_template;
-
           if (!isMounted) {
-            return;
-          }
+          return;
+        }
 
-          setSessionTemplate(templateForCurrentUser);
-          saveSessionUiSnapshot(roomId, templateForCurrentUser);
+        setLearnerTemplates(generatedTemplates);
+        saveLearnerSessionTemplates(roomId, generatedTemplates);
         } catch {
           // If DeepSeek is not configured or generation fails, keep static fallback.
         }
@@ -639,43 +701,44 @@ export default function SessionRoomPage() {
                 <Badge variant="info">Session topic</Badge>
 
                 <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-950">
-                  {sessionTemplate?.title ?? "Loading session topic..."}
+                  {activeTopicTitle}
                 </h2>
 
                 <p className="mt-3 max-w-3xl text-base leading-7 text-slate-600">
-                  Use the topic cards below to keep the speaking session
-                  structured.
+                  Practice speaking around this topic with your partner.
                 </p>
               </Card>
 
               {topicCards.map((card) => (
-                <Card key={card.id} className="p-6">
-                  <Badge variant="info">Topic card</Badge>
+                <React.Fragment key={card.id}>
+                  {currentRole === "helper" && (
+                    <Card className="p-6">
+                      <Badge variant="info">Questions for helper</Badge>
 
-                  <h2 className="mt-4 text-3xl font-black tracking-tight text-slate-950">
-                    {card.title}
-                  </h2>
+                      <div className="mt-5 space-y-3">
+                        {card.questions.map((question, index) => (
+                          <div
+                            key={question}
+                            className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                          >
+                            <p className="text-sm font-black uppercase tracking-wide text-indigo-500">
+                              Question {index + 1}
+                            </p>
 
-                  <div className="mt-5 space-y-3">
-                    {card.questions.map((question, index) => (
-                      <div
-                        key={question}
-                        className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-                      >
-                        <p className="text-sm font-black uppercase tracking-wide text-indigo-500">
-                          Question {index + 1}
-                        </p>
-
-                        <p className="mt-1 text-base font-bold leading-7 text-slate-900">
-                          {question}
-                        </p>
+                            <p className="mt-1 text-base font-bold leading-7 text-slate-900">
+                              {question}
+                            </p>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </Card>
+                    </Card>
+                  )}
+                </React.Fragment>
               ))}
 
-              <VocabularyHints hints={vocabularyHints} />
+              {currentRole === "learner" && (
+                <VocabularyHints hints={vocabularyHints} />
+              )}
             </>
           ) : (
             <Card className="p-6">

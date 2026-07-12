@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from pydantic import BaseModel
 
 
@@ -18,8 +20,10 @@ class SessionTemplate(BaseModel):
 
 
 class SessionTemplateGenerateRequest(BaseModel):
+    room_id: UUID | None = None
     user1_id: int
     user2_id: int
+
 
 class SessionTemplatesResponse(BaseModel):
     user1_template: SessionTemplate
