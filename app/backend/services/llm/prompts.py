@@ -37,7 +37,7 @@ Rules:
     - but also should not require specialized expert knowledge.
     - prefer commonly used domain-specific terminology that a fluent non-expert speaker would naturally use when discussing the topic.
     - ensure vocabulary is equally natural and equally informative in all supported languages (no simplification or enrichment depending on language).
-17. Vocabulary definitions must be written in the same language as the generated template.
+17. Vocabulary definitions must be written in the user's native language.
 18. Vocabulary definitions must be written in plain learner-friendly language.
     - Do NOT use technical jargon unless unavoidable.
     - If a technical term is necessary, include a brief explanation in parentheses within the meaning.
@@ -77,7 +77,8 @@ def build_session_template_prompt(user, common_interests: str) -> list:
             User bio:
             {user.bio or "No bio provided"}
 
-            All content must be in {user.target_language}.
+            All generated content (title, topic, questions, vocabulary terms) must be in {user.target_language}.
+            Vocabulary definitions must be in {user.native_language}.
             Return only JSON.
             """
         }
