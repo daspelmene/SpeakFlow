@@ -2,6 +2,38 @@
 
 A web platform for structured foreign language speaking practice between people from different parts of the world. Users create profiles with native and target languages and interests. The system matches suitable partners and allows them to join built-in audio-only rooms. During a session, users follow guided conversation scenarios with stages, roles, topic cards, useful phrases, correction notes and feedback. The main goal is to make language exchange more structured, balanced, and useful than regular chats or random calls.
 
+## Deployed Application
+
+| Service       | URL |
+|---------------|-----|
+| Backend       | `https://10.93.27.41` |
+| Swagger UI    | `https://10.93.27.41/docs` |
+| ReDoc         | `https://10.93.27.41/redoc` |
+| Main app (UI) | `https://10.93.27.41/` |
+
+## Features
+
+- User registration and JWT authentication
+- User profile with native/target languages and interests
+- Partner matching for language exchange
+- Audio-only conversation rooms
+- AI-generated conversation session templates
+- Live correction notes during conversations
+- Session feedback system
+- REST API with OpenAPI (Swagger)
+- Docker Compose support for local development
+- Kubernetes deployment
+
+## Team Contributions
+
+- **Denis Nurmuhametov** (Backend, Project Manager): authentication & authorization, project management
+- **Alina Pestova** (Machine Learning): partner matching engine
+- **Semen Nadutkin** (DevOps): infrastructure, Docker, Kubernetes, CI/CD and deployment
+- **Igor Baranov** (Backend): audio rooms and real-time communication
+- **Damir Bayazitov** (Frontend): frontend implementation and application pages
+- **Daniil Agafonov** (Frontend): UI/UX design and interface development
+- **Magomedgadzhi Ibragimov** (Backend): AI-powered session generation, live notes and feedback system
+
 ## Figures
 
 ### Landing page
@@ -75,7 +107,6 @@ speakflow
 - **pytest** + **pytest-asyncio** + **httpx** — testing
 - **Ruff** — code linting
 
-
 ### Frontend
 - **Next.js** — React framework
 - **TypeScript** — type safety
@@ -100,31 +131,36 @@ speakflow
 | `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime (days) |
 | `DEEPSEEK_API_KEY` | Access key to DeepSeek API  |
 
-## Build & Run on your machine with Docker Compose
+## Run Locally with Docker Compose
 
-```bash
-# Clone the repository
-git clone https://gitlab.pg.innopolis.university/speakflow/speakflow.git
-# Build and run
-cd speakflow
-bash scripts/install.sh
-```
+### Prerequisites
 
-| Service       | URL |
-|---------------|-----|
-| Backend       | `http://localhost:8000` |
-| Swagger UI    | `http://localhost:8000/docs` |
-| ReDoc         | `http://localhost:8000/redoc` |
-| Main app (UI) | `http://localhost:3000` |
+- Docker and Docker Compose
+- A DeepSeek API key (see the [setup instructions](https://platform.deepseek.com/api_keys))
 
-## See our app running on VM
+### Installation
 
-| Service       | URL |
-|---------------|-----|
-| Backend       | `https://10.93.27.41` |
-| Swagger UI    | `https://10.93.27.41/docs` |
-| ReDoc         | `https://10.93.27.41/redoc` |
-| Main app (UI) | `https://10.93.27.41/` |
+1. Clone the repository:
+
+    ```bash
+    git clone https://gitlab.pg.innopolis.university/speakflow/speakflow.git
+    cd speakflow
+    ```
+
+2. Build and start the application:
+
+    ```bash
+    bash scripts/install-docker-compose.sh
+    ```
+
+3. Once the containers are running, the following services will be available:
+
+| Service | URL |
+|---------|-----|
+| Backend API | `http://localhost:8000` |
+| Swagger UI | `http://localhost:8000/docs` |
+| ReDoc | `http://localhost:8000/redoc` |
+| Web Application | `http://localhost:3000` |
 
 ## Testing
 
@@ -140,6 +176,14 @@ bash ./install.sh
 docker run --rm \
     --network speakflow_default \
     semyonnadutkin/speakflow-tests:latest -d
+```
+
+## Code Coverage
+
+- **Code Coverage:** 70.44%
+- Generate code coverage report with the provided script:
+```bash
+bash scripts/code-coverage.sh
 ```
 
 ## API Endpoints
