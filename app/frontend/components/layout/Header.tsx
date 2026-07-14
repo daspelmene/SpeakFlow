@@ -113,83 +113,85 @@ export default function Header() {
           </div>
         </Link>
 
-        <nav className="flex items-center gap-3">
-          {shouldShowPrivateNavigation ? (
-            <>
-              <Link
-                href="/dashboard"
-                className={`inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2 text-base font-bold transition-colors hover:bg-slate-100 hover:text-slate-950 ${
-                  pathname === "/dashboard"
-                    ? "bg-slate-100 text-slate-950"
-                    : "text-slate-600"
-                }`}
-              >
-                Dashboard
-              </Link>
-
-              <Link
-                href="/profile"
-                className={`inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2 text-base font-bold transition-colors hover:bg-slate-100 hover:text-slate-950 ${
-                  pathname.startsWith("/profile")
-                    ? "bg-slate-100 text-slate-950"
-                    : "text-slate-600"
-                }`}
-              >
-                Profile
-              </Link>
-
-              <button
-                type="button"
-                onClick={openOnboardingTutorial}
-                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2 text-base font-bold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus:outline-none focus:ring-4 focus:ring-indigo-100"
-                aria-label="Open application tutorial"
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  className="h-5 w-5"
-                  aria-hidden="true"
+        {pathname !== "/" && (
+          <nav className="flex items-center gap-3">
+            {shouldShowPrivateNavigation ? (
+              <>
+                <Link
+                  href="/dashboard"
+                  className={`inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2 text-base font-bold transition-colors hover:bg-slate-100 hover:text-slate-950 ${
+                    pathname === "/dashboard"
+                      ? "bg-slate-100 text-slate-950"
+                      : "text-slate-600"
+                  }`}
                 >
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="M9.5 9a2.5 2.5 0 1 1 4.2 1.8c-.9.7-1.7 1.2-1.7 2.7" />
-                  <path d="M12 17h.01" />
-                </svg>
-                <span className="hidden xl:inline">Help</span>
-              </button>
+                  Dashboard
+                </Link>
 
-              <Button
-                type="button"
-                variant="secondary"
-                size="md"
-                onClick={handleLogOut}
-              >
-                Log out
-              </Button>
-            </>
-          ) : (
-            <>
-              <Link
-                href="/login"
-                className={`inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2 text-base font-bold transition-colors hover:bg-slate-100 hover:text-slate-950 ${
-                  pathname === "/login"
-                    ? "bg-slate-100 text-slate-950"
-                    : "text-slate-600"
-                }`}
-              >
-                Login
-              </Link>
+                <Link
+                  href="/profile"
+                  className={`inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2 text-base font-bold transition-colors hover:bg-slate-100 hover:text-slate-950 ${
+                    pathname.startsWith("/profile")
+                      ? "bg-slate-100 text-slate-950"
+                      : "text-slate-600"
+                  }`}
+                >
+                  Profile
+                </Link>
 
-              <Link
-                href="/register"
-                className="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-5 py-2.5 text-base font-bold text-white shadow-sm shadow-indigo-200 transition-colors hover:bg-indigo-700"
-              >
-                Get started
-              </Link>
-            </>
-          )}
-        </nav>
+                <button
+                  type="button"
+                  onClick={openOnboardingTutorial}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 py-2 text-base font-bold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-950 focus:outline-none focus:ring-4 focus:ring-indigo-100"
+                  aria-label="Open application tutorial"
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    className="h-5 w-5"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M9.5 9a2.5 2.5 0 1 1 4.2 1.8c-.9.7-1.7 1.2-1.7 2.7" />
+                    <path d="M12 17h.01" />
+                  </svg>
+                  <span className="hidden xl:inline">Help</span>
+                </button>
+
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="md"
+                  onClick={handleLogOut}
+                >
+                  Log out
+                </Button>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className={`inline-flex min-h-11 items-center justify-center rounded-xl px-4 py-2 text-base font-bold transition-colors hover:bg-slate-100 hover:text-slate-950 ${
+                    pathname === "/login"
+                      ? "bg-slate-100 text-slate-950"
+                      : "text-slate-600"
+                  }`}
+                >
+                  Login
+                </Link>
+
+                <Link
+                  href="/register"
+                  className="inline-flex min-h-11 items-center justify-center rounded-xl bg-indigo-600 px-5 py-2.5 text-base font-bold text-white shadow-sm shadow-indigo-200 transition-colors hover:bg-indigo-700"
+                >
+                  Get started
+                </Link>
+              </>
+            )}
+          </nav>
+        )}
       </div>
     </header>
   );
