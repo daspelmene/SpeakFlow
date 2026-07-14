@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useSyncExternalStore } from "react";
 
 import Button from "@/components/ui/Button";
-import { getCurrentUser, isUnauthorizedError } from "@/lib/api";
+import { getCurrentUser, isUnauthorizedError, logoutUser } from "@/lib/api";
 import { clearTokens, getAccessToken } from "@/lib/auth";
 import { removeActiveRoomId } from "@/lib/activeRoomStorage";
 import { openOnboardingTutorial } from "@/lib/tutorial";
@@ -80,10 +80,14 @@ export default function Header() {
     };
   }, [hasStoredToken, pathname, router]);
 
-  function handleLogOut() {
-    clearTokens();
-    removeActiveRoomId();
-    router.push("/login");
+  async function handleLogOut() {
+    try {
+      await logoutUser();
+    } finally {
+      clearTokens();
+      removeActiveRoomId();
+      router.push("/login");
+    }
   }
 
   const shouldShowPrivateNavigation =
