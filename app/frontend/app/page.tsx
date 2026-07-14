@@ -7,7 +7,7 @@ import Card from "@/components/ui/Card";
 export default function Home() {
   return (
     <PageContainer>
-      <section className="grid min-h-[calc(100vh-105px)] items-center gap-8 py-5 lg:grid-cols-[1.18fr_0.82fr]">
+      <section className="grid min-h-[calc(100dvh-141px)] items-center gap-8 py-5 lg:grid-cols-[1.18fr_0.82fr]">
         <div>
           <Badge variant="info">Guided speaking practice</Badge>
 
