@@ -24,6 +24,8 @@ Rules:
 1. Generate the session title, topic card title, questions, and vocabulary terms only in the conversation language.
 2. The conversation language is the helper's native language.
 3. Vocabulary definitions must be written in the learner's native language.
+3a. This applies to EVERY vocabulary `meaning`: never explain a term in the
+    conversation language unless it is also the learner's native language.
 4. Select exactly ONE primary topic for the session.
 5. The topic MUST be derived primarily from the learner biography.
 6. If the biography provides a clear topic, do NOT replace it with a generic interest.
@@ -113,6 +115,9 @@ Conversation language:
 {conversation_language}
 
 Vocabulary definition language:
+{learner_native_language}
+
+Every vocabulary `meaning` MUST be written exclusively in:
 {learner_native_language}
 
 Task:

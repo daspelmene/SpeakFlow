@@ -71,16 +71,6 @@ async def login(data: LoginRequest, db: Database = Depends(Database.get_db)):
     if not Hasher.verify_password(data.password, user.password_hash):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid email or password")
 
-    if (
-        user.active_session_id
-        and user.active_session_expires_at
-        and user.active_session_expires_at > datetime.now()
-    ):
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            "This account already has an active session.",
-        )
-
     session_id = _start_session(user)
     await db.users.save_user(user)
     return _tokens(user, session_id)

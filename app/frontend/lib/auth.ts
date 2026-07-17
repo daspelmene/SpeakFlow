@@ -23,6 +23,8 @@ export function saveTokens(tokens: AuthTokens) {
 
   sessionStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
   sessionStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
   notifyAuthChange();
 }
 
@@ -49,7 +51,6 @@ export function clearTokens() {
 
   sessionStorage.removeItem(ACCESS_TOKEN_KEY);
   sessionStorage.removeItem(REFRESH_TOKEN_KEY);
-  // Remove tokens written by older versions, otherwise another tab can inherit them.
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   notifyAuthChange();
