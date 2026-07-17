@@ -8,6 +8,7 @@ python-jose[cryptography]
 pydantic-settings
 python-multipart
 pydantic
+email-validator
 alembic>=1.18
 pytest>=8.0
 pytest-asyncio>=0.24

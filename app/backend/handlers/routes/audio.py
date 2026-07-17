@@ -27,6 +27,7 @@ from utils.audio_ws import ws_audio_service
 from utils.jwt import get_current_user, decode_token
 from models.user import User
 from storage.database import Database
+from services.llm.partner_matching_service import rank_matching_users
 
 logger = logging.getLogger("audio-routes")
 
@@ -120,6 +121,8 @@ async def create_room(
     logger.info(
         f"Available matched users after filtering: {len(available_matched)}"
     )
+
+    available_matched = await rank_matching_users(user, available_matched)
 
     if not available_matched:
         logger.warning(f"No available matched users for user {user.id}")
