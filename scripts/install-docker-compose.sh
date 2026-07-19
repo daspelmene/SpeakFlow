@@ -14,7 +14,22 @@ algorithm="HS256"
 access_token_expire_min="30"
 refresh_token_expire_days="1"
 secret_key=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 64)
-read -p "Enter DeepSeek API key: " deepseek_api_key
+read -p "Enter DeepSeek API key (or press Enter): " deepseek_api_key
+
+if [ -z "$deepseek_api_key" ]; then
+    echo -e "\n\nATTENTION: DeepSeek API was not specified !!!"
+    echo "-> The key will be set to 'none': There will be NO smart matching and session topic generation"
+    echo "-> In 30 seconds the script will continue its execution..."
+
+    deepseek_api_key="none"
+
+    for t in {1..30}; do
+        echo -n "."
+        sleep 1
+    done
+
+    echo -e "\nContinuing executing the script..."
+fi
 
 echo "Writing the data..."
 cat << EOF > .env

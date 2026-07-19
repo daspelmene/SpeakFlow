@@ -48,8 +48,12 @@ async def get_current_user(
     db: Database = Depends(Database.get_db),
 ):
     payload = decode_token(token.credentials)
+    if payload.get("type") != "access":
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid token type")
     user_id = _get_user_id(payload)
     user = await db.users.get_user_by_id(user_id)
     if user is None or not user.is_active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found or inactive")
+    if not payload.get("sid") or payload["sid"] != user.active_session_id:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session is no longer active")
     return user

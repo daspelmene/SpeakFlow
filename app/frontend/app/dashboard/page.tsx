@@ -503,9 +503,9 @@ export default function DashboardPage() {
         error instanceof Error ? error.message : "Failed to invite user";
 
       setInviteError(message);
-      setDashboardError(message);
 
       if (isActiveRoomConflict(message)) {
+        setDashboardError(message);
         void loadActiveRoom();
       }
     } finally {

@@ -27,6 +27,7 @@ from utils.audio_ws import ws_audio_service
 from utils.jwt import get_current_user, decode_token
 from models.user import User
 from storage.database import Database
+from services.llm.partner_matching_service import rank_matching_users
 
 logger = logging.getLogger("audio-routes")
 
@@ -120,6 +121,8 @@ async def create_room(
     logger.info(
         f"Available matched users after filtering: {len(available_matched)}"
     )
+
+    available_matched = await rank_matching_users(user, available_matched)
 
     if not available_matched:
         logger.warning(f"No available matched users for user {user.id}")
@@ -438,12 +441,16 @@ async def audio_websocket(
         payload = decode_token(token)
         user_id = payload.get("sub")
 
-        if not user_id:
+        if not user_id or payload.get("type") != "access":
             logger.warning("WebSocket auth failed: no subject in token")
             await websocket.close(code=4001, reason="Invalid token: no subject")
             return
 
         user_id = int(user_id)
+        user = await db.users.get_user_by_id(user_id)
+        if user is None or payload.get("sid") != user.active_session_id:
+            await websocket.close(code=4001, reason="Session is no longer active")
+            return
 
         logger.info(f"WebSocket authenticated for user {user_id} in room {room_id}")
     except HTTPException:
@@ -619,4 +626,3 @@ async def audio_websocket(
             f"Cleaning up WebSocket for {user_name} ({user_slot}) in room {room_id}"
         )
         await ws_audio_service.disconnect_user(room_id, user_slot, websocket)
-        

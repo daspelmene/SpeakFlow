@@ -1,0 +1,51 @@
+services:
+  backend:
+    restart: "no"
+
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >
+        alembic upgrade head &&
+        exec coverage run
+        --rcfile=/app/.coveragerc
+        -m uvicorn main:app
+        --host 0.0.0.0
+        --port 8000
+
+    environment:
+      COVERAGE_FILE: /coverage/.coverage
+
+    volumes:
+      - ./.coveragerc:/app/.coveragerc:ro,Z
+      - ./coverage:/coverage:Z
+
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://localhost:8000/docs')"
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+
+  tests:
+    build:
+      context: .
+      dockerfile: app/tests/Dockerfile
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: postgres
+      API_BASE_URL: http://backend:8000/api/v1

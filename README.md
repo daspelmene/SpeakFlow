@@ -2,67 +2,81 @@
 
 A web platform for structured foreign language speaking practice between people from different parts of the world. Users create profiles with native and target languages and interests. The system matches suitable partners and allows them to join built-in audio-only rooms. During a session, users follow guided conversation scenarios with stages, roles, topic cards, useful phrases, correction notes and feedback. The main goal is to make language exchange more structured, balanced, and useful than regular chats or random calls.
 
-## Figures
+## Roadmap
 
-### Landing page
+### Sprint 1
 
-![landing page](docs/images/landing-page.png)
+* JWT-based authentication
+* Session topic templates
+* Landing, Login, and Registration pages
+* Initial database schema
+* Containerization with Docker and orchestration with Docker Compose
+* Kubernetes manifests for PostgreSQL and initial cluster setup
+* Dataset synthesis
 
-### Dashboard
+### Sprint 2
 
-![dashboard page](docs/images/dashboard.png)
+* Profile and Dashboard pages
+* UI validation messages for the Login and Registration pages
+* API endpoint for storing and retrieving live correction notes and session feedback
+* Linting and build stages in the CI/CD pipeline
+* Pipeline for transforming user bios and interests into vector embeddings
+* Improved UI accessibility with larger fonts and buttons
+* Kubernetes manifests for the backend, frontend, and Ingress
+* Kubernetes-based orchestration
 
-### Session page
+### Sprint 3
 
-![session page](docs/images/session-page.png)
+* API endpoints for user invitations
+* LLM-generated vocabulary hints
+* UI for vocabulary hints
+* API endpoint for user matching
+* Comprehensive API testing with Pytest in the CI/CD pipeline
+* Continuous deployment
 
-## Project Structure
+### Sprint 4
 
-```
-speakflow
-├── app                         # Application source code
-│   ├── backend                 # FastAPI backend
-│   │   ├── alembic             # Database migrations
-│   │   ├── config              # Configuration management
-│   │   ├── handlers            # HTTP and WebSocket handlers
-│   │   │   ├── routes          # API endpoints
-│   │   │   └── server          # WebSocket server
-│   │   ├── models              # SQLAlchemy models
-│   │   ├── resources           # Static backend resources
-│   │   ├── schemas             # Pydantic request/response schemas
-│   │   ├── services            # Business logic
-│   │   │   └── llm             # LLM integration
-│   │   ├── storage             # Repository layer
-│   │   └── utils               # Shared utilities
-│   ├── frontend                # Next.js frontend
-│   │   ├── app                 # App Router pages
-│   │   ├── components          # Reusable React components
-│   │   │   ├── layout          # Layout components
-│   │   │   └── ui              # Generic UI components
-│   │   ├── hooks               # Custom React hooks
-│   │   ├── lib                 # API clients and frontend utilities
-│   │   └── public              # Static assets
-│   ├── ml                      # Matching service
-│   │   ├── data                # Dataset generation and mock data
-│   │   ├── handlers            # ML service API
-│   │   └── model               # Matching model implementation
-│   └── tests                   # Backend integration and API tests
-├── ci                          # GitLab CI/CD configuration
-│   ├── scripts                 # CI helper scripts
-│   └── templates               # Modular pipeline templates
-│       ├── base                # Base job definitions
-│       └── jobs                # Build, test, lint and deploy jobs
-├── docker-compose.yml          # Local development environment
-├── install.sh                  # Initial project setup
-├── k8s                         # Kubernetes manifests
-│   └── base                    # Base Kustomize configuration
-│       ├── backend             # Backend resources
-│       ├── frontend            # Frontend resources
-│       ├── networking          # Ingress configuration
-│       └── postgres            # PostgreSQL resources
-├── .env.example                # Example .env file
-└── README.md                   # Project documentation
-```
+* Support for direct invitations
+* Role-switching mechanism
+* UI for live correction notes and post-session feedback
+* UI for viewing a partner's profile
+* UI simplification and usability improvements
+
+### Sprint 5
+
+* Comprehensive documentation in `README.md` and an installation script
+* Automatic fallback to predefined session topics when no DeepSeek API key is provided
+* Code coverage reporting and report generation script
+* Enforcement of a single active session per user
+* DeepSeek-powered smart matching
+* User tutorial
+
+## Features
+
+- User registration and JWT authentication
+- User profile with native/target languages and interests
+- Partner matching for language exchange
+- Audio-only conversation rooms
+- AI-generated conversation session templates
+- Live correction notes during conversations
+- Session feedback system
+- REST API with OpenAPI (Swagger)
+- Docker Compose support for local development
+- Kubernetes deployment
+
+## Team Contributions
+
+- **Denis Nurmuhametov** (Backend, Project Manager): authentication & authorization, project management
+- **Alina Pestova** (Machine Learning): partner matching engine
+- **Semen Nadutkin** (DevOps): infrastructure, Docker, Kubernetes, CI/CD and deployment
+- **Igor Baranov** (Backend): audio rooms and real-time communication
+- **Damir Bayazitov** (Frontend): frontend implementation and application pages
+- **Daniil Agafonov** (Frontend): UI/UX design and interface development
+- **Magomedgadzhi Ibragimov** (Backend): AI-powered session generation, live notes and feedback system
+
+## Architecture
+
+![architecture](docs/images/architecture.png)
 
 ## Tech Stack
 
@@ -74,7 +88,6 @@ speakflow
 - **passlib[bcrypt]** — password hashing
 - **pytest** + **pytest-asyncio** + **httpx** — testing
 - **Ruff** — code linting
-
 
 ### Frontend
 - **Next.js** — React framework
@@ -100,24 +113,38 @@ speakflow
 | `JWT_REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime (days) |
 | `DEEPSEEK_API_KEY` | Access key to DeepSeek API  |
 
-## Build & Run on your machine with Docker Compose
+## Run Locally with Docker Compose
 
-```bash
-# Clone the repository
-git clone https://gitlab.pg.innopolis.university/speakflow/speakflow.git
-# Build and run
-cd speakflow
-bash scripts/install.sh
-```
+### Prerequisites
 
-| Service       | URL |
-|---------------|-----|
-| Backend       | `http://localhost:8000` |
-| Swagger UI    | `http://localhost:8000/docs` |
-| ReDoc         | `http://localhost:8000/redoc` |
-| Main app (UI) | `http://localhost:3000` |
+- Docker and Docker Compose
+- A DeepSeek API key (see the [setup instructions](https://platform.deepseek.com/api_keys))
 
-## See our app running on VM
+### Installation
+
+1. Clone the repository:
+
+    ```bash
+    git clone https://gitlab.pg.innopolis.university/speakflow/speakflow.git
+    cd speakflow
+    ```
+
+2. Build and start the application:
+
+    ```bash
+    bash scripts/install-docker-compose.sh
+    ```
+
+3. Once the containers are running, the following services will be available:
+
+| Service | URL |
+|---------|-----|
+| Backend API | `http://localhost:8000` |
+| Swagger UI | `http://localhost:8000/docs` |
+| ReDoc | `http://localhost:8000/redoc` |
+| Web Application | `http://localhost:3000` |
+
+## Deployed Application
 
 | Service       | URL |
 |---------------|-----|
@@ -125,6 +152,24 @@ bash scripts/install.sh
 | Swagger UI    | `https://10.93.27.41/docs` |
 | ReDoc         | `https://10.93.27.41/redoc` |
 | Main app (UI) | `https://10.93.27.41/` |
+
+## Figures
+
+### UI/UX Design
+
+A dedicated UI/UX design phase and Figma mockups were intentionally omitted in this project. The primary focus was on backend development, system architecture, API design, and server-side functionality. Since the frontend was not the core objective, the user interface was developed iteratively alongside implementation. This approach enabled the team to rapidly validate ideas, adapt the interface to evolving requirements, and prioritize the project's core technical objectives. As a result, no Figma design files were created.
+
+### Landing page
+
+![landing page](docs/images/landing-page.png)
+
+### Dashboard
+
+![dashboard page](docs/images/dashboard.png)
+
+### Session page
+
+![session page](docs/images/session-page.png)
 
 ## Testing
 
@@ -142,7 +187,15 @@ docker run --rm \
     semyonnadutkin/speakflow-tests:latest -d
 ```
 
-## API Endpoints
+## Code Coverage
+
+- **Code Coverage:** 70.44%
+- Generate code coverage report with the provided script:
+```bash
+bash scripts/code-coverage.sh
+```
+
+## Backend API Endpoints
 
 | Method | Path                                      | Description                    |
 | ------ | ----------------------------------------- | ------------------------------ |
