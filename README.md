@@ -2,14 +2,54 @@
 
 A web platform for structured foreign language speaking practice between people from different parts of the world. Users create profiles with native and target languages and interests. The system matches suitable partners and allows them to join built-in audio-only rooms. During a session, users follow guided conversation scenarios with stages, roles, topic cards, useful phrases, correction notes and feedback. The main goal is to make language exchange more structured, balanced, and useful than regular chats or random calls.
 
-## Deployed Application
+## Roadmap
 
-| Service       | URL |
-|---------------|-----|
-| Backend       | `https://10.93.27.41` |
-| Swagger UI    | `https://10.93.27.41/docs` |
-| ReDoc         | `https://10.93.27.41/redoc` |
-| Main app (UI) | `https://10.93.27.41/` |
+### Sprint 1
+
+* JWT-based authentication
+* Session topic templates
+* Landing, Login, and Registration pages
+* Initial database schema
+* Containerization with Docker and orchestration with Docker Compose
+* Kubernetes manifests for PostgreSQL and initial cluster setup
+* Dataset synthesis
+
+### Sprint 2
+
+* Profile and Dashboard pages
+* UI validation messages for the Login and Registration pages
+* API endpoint for storing and retrieving live correction notes and session feedback
+* Linting and build stages in the CI/CD pipeline
+* Pipeline for transforming user bios and interests into vector embeddings
+* Improved UI accessibility with larger fonts and buttons
+* Kubernetes manifests for the backend, frontend, and Ingress
+* Kubernetes-based orchestration
+
+### Sprint 3
+
+* API endpoints for user invitations
+* LLM-generated vocabulary hints
+* UI for vocabulary hints
+* API endpoint for user matching
+* Comprehensive API testing with Pytest in the CI/CD pipeline
+* Continuous deployment
+
+### Sprint 4
+
+* Support for direct invitations
+* Role-switching mechanism
+* UI for live correction notes and post-session feedback
+* UI for viewing a partner's profile
+* UI simplification and usability improvements
+
+### Sprint 5
+
+* Comprehensive documentation in `README.md` and an installation script
+* Automatic fallback to predefined session topics when no DeepSeek API key is provided
+* Code coverage reporting and report generation script
+* Enforcement of a single active session per user
+* DeepSeek-powered smart matching
+* User tutorial
 
 ## Features
 
@@ -33,20 +73,6 @@ A web platform for structured foreign language speaking practice between people 
 - **Damir Bayazitov** (Frontend): frontend implementation and application pages
 - **Daniil Agafonov** (Frontend): UI/UX design and interface development
 - **Magomedgadzhi Ibragimov** (Backend): AI-powered session generation, live notes and feedback system
-
-## Figures
-
-### Landing page
-
-![landing page](docs/images/landing-page.png)
-
-### Dashboard
-
-![dashboard page](docs/images/dashboard.png)
-
-### Session page
-
-![session page](docs/images/session-page.png)
 
 ## Project Structure
 
@@ -162,6 +188,33 @@ speakflow
 | ReDoc | `http://localhost:8000/redoc` |
 | Web Application | `http://localhost:3000` |
 
+## Deployed Application
+
+| Service       | URL |
+|---------------|-----|
+| Backend       | `https://10.93.27.41` |
+| Swagger UI    | `https://10.93.27.41/docs` |
+| ReDoc         | `https://10.93.27.41/redoc` |
+| Main app (UI) | `https://10.93.27.41/` |
+
+## Figures
+
+### UI/UX Design
+
+A dedicated UI/UX design phase and Figma mockups were intentionally omitted in this project. The primary focus was on backend development, system architecture, API design, and server-side functionality. Since the frontend was not the core objective, the user interface was developed iteratively alongside implementation. This approach enabled the team to rapidly validate ideas, adapt the interface to evolving requirements, and prioritize the project's core technical objectives. As a result, no Figma design files were created.
+
+### Landing page
+
+![landing page](docs/images/landing-page.png)
+
+### Dashboard
+
+![dashboard page](docs/images/dashboard.png)
+
+### Session page
+
+![session page](docs/images/session-page.png)
+
 ## Testing
 
 ### Linux/MacOS
@@ -186,7 +239,7 @@ docker run --rm \
 bash scripts/code-coverage.sh
 ```
 
-## API Endpoints
+## Backend API Endpoints
 
 | Method | Path                                      | Description                    |
 | ------ | ----------------------------------------- | ------------------------------ |
