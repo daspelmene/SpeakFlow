@@ -74,53 +74,9 @@ A web platform for structured foreign language speaking practice between people 
 - **Daniil Agafonov** (Frontend): UI/UX design and interface development
 - **Magomedgadzhi Ibragimov** (Backend): AI-powered session generation, live notes and feedback system
 
-## Project Structure
+## Architecture
 
-```
-speakflow
-├── app                         # Application source code
-│   ├── backend                 # FastAPI backend
-│   │   ├── alembic             # Database migrations
-│   │   ├── config              # Configuration management
-│   │   ├── handlers            # HTTP and WebSocket handlers
-│   │   │   ├── routes          # API endpoints
-│   │   │   └── server          # WebSocket server
-│   │   ├── models              # SQLAlchemy models
-│   │   ├── resources           # Static backend resources
-│   │   ├── schemas             # Pydantic request/response schemas
-│   │   ├── services            # Business logic
-│   │   │   └── llm             # LLM integration
-│   │   ├── storage             # Repository layer
-│   │   └── utils               # Shared utilities
-│   ├── frontend                # Next.js frontend
-│   │   ├── app                 # App Router pages
-│   │   ├── components          # Reusable React components
-│   │   │   ├── layout          # Layout components
-│   │   │   └── ui              # Generic UI components
-│   │   ├── hooks               # Custom React hooks
-│   │   ├── lib                 # API clients and frontend utilities
-│   │   └── public              # Static assets
-│   ├── ml                      # Matching service
-│   │   ├── data                # Dataset generation and mock data
-│   │   ├── handlers            # ML service API
-│   │   └── model               # Matching model implementation
-│   └── tests                   # Backend integration and API tests
-├── ci                          # GitLab CI/CD configuration
-│   ├── scripts                 # CI helper scripts
-│   └── templates               # Modular pipeline templates
-│       ├── base                # Base job definitions
-│       └── jobs                # Build, test, lint and deploy jobs
-├── docker-compose.yml          # Local development environment
-├── install.sh                  # Initial project setup
-├── k8s                         # Kubernetes manifests
-│   └── base                    # Base Kustomize configuration
-│       ├── backend             # Backend resources
-│       ├── frontend            # Frontend resources
-│       ├── networking          # Ingress configuration
-│       └── postgres            # PostgreSQL resources
-├── .env.example                # Example .env file
-└── README.md                   # Project documentation
-```
+![architecture](docs/images/architecture.png)
 
 ## Tech Stack
 
