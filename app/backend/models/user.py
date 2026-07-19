@@ -16,5 +16,7 @@ class User(Base):
     interests: Mapped[Optional[list[str]]] = mapped_column(JSONB, default=list)
     bio: Mapped[Optional[str]]
     is_active: Mapped[bool] = mapped_column(default=True)
+    active_session_id: Mapped[Optional[str]] = mapped_column(nullable=True, index=True)
+    active_session_expires_at: Mapped[Optional[datetime]] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(default=datetime.now)
     updated_at: Mapped[datetime] = mapped_column(default=datetime.now)

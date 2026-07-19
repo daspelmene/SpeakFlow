@@ -21,8 +21,10 @@ export function saveTokens(tokens: AuthTokens) {
     return;
   }
 
-  localStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
-  localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
+  sessionStorage.setItem(ACCESS_TOKEN_KEY, tokens.access_token);
+  sessionStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token);
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
   notifyAuthChange();
 }
 
@@ -31,7 +33,7 @@ export function getAccessToken() {
     return null;
   }
 
-  return localStorage.getItem(ACCESS_TOKEN_KEY);
+  return sessionStorage.getItem(ACCESS_TOKEN_KEY);
 }
 
 export function getRefreshToken() {
@@ -39,7 +41,7 @@ export function getRefreshToken() {
     return null;
   }
 
-  return localStorage.getItem(REFRESH_TOKEN_KEY);
+  return sessionStorage.getItem(REFRESH_TOKEN_KEY);
 }
 
 export function clearTokens() {
@@ -47,6 +49,8 @@ export function clearTokens() {
     return;
   }
 
+  sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+  sessionStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   notifyAuthChange();

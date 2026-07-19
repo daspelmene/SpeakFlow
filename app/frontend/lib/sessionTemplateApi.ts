@@ -19,6 +19,11 @@ export type SessionTemplate = {
 
 export type SessionTemplatesById = Record<string, SessionTemplate>;
 
+export type SessionTemplatesByLearnerSlot = {
+  user1_template: SessionTemplate;
+  user2_template: SessionTemplate;
+};
+
 type BackendVocabularyItem = {
   word: string;
   meaning: string;
@@ -36,6 +41,7 @@ type BackendSessionTemplate = {
 };
 
 type GenerateSessionTemplatesPayload = {
+  room_id?: string;
   user1_id: number;
   user2_id: number;
 };
@@ -79,7 +85,7 @@ export function getSessionTemplate(templateId: string) {
 
 export async function generateSessionTemplates(
   payload: GenerateSessionTemplatesPayload,
-) {
+): Promise<SessionTemplatesByLearnerSlot> {
   const response = await request<GenerateSessionTemplatesResponse>(
     "/api/v1/session-templates/generate",
     {

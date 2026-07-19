@@ -16,6 +16,25 @@ async def test_register_success(client: AsyncClient):
     assert "refresh_token" in data
     assert data["token_type"] == "bearer"
 
+
+@pytest.mark.parametrize(
+    "email",
+    [
+        "a@b/.c",
+        "a@-example.com",
+        "a@example-.com",
+        "a@example",
+    ],
+)
+async def test_register_rejects_invalid_email(client: AsyncClient, email: str):
+    resp = await client.post("/auth/register", json={
+        "email": email,
+        "password": "pass123",
+        "fullname": "Invalid Email",
+    })
+
+    assert resp.status_code == 422
+
 async def test_register_duplicate_email(client: AsyncClient):
     await register_user(client, "dup@example.com", "pass", "Dup")
     resp = await client.post("/auth/register", json={
@@ -28,12 +47,50 @@ async def test_register_duplicate_email(client: AsyncClient):
 
 async def test_login_success(client: AsyncClient):
     email, password = "login@example.com", "pass123"
-    await register_user(client, email, password, "Login")
+    access_token, _ = await register_user(client, email, password, "Login")
+    await client.post(
+        "/auth/logout", headers={"Authorization": f"Bearer {access_token}"}
+    )
     resp = await client.post("/auth/login", json={"email": email, "password": password})
     assert resp.status_code == 200
     data = resp.json()
     assert "access_token" in data
     assert "refresh_token" in data
+
+
+async def test_login_replaces_active_session(client: AsyncClient):
+    email, password = "active@example.com", "pass123"
+    old_access_token, _ = await register_user(client, email, password, "Active")
+
+    resp = await client.post("/auth/login", json={"email": email, "password": password})
+
+    assert resp.status_code == 200
+
+    old_session_resp = await client.get(
+        "/users/me", headers={"Authorization": f"Bearer {old_access_token}"}
+    )
+    assert old_session_resp.status_code == 401
+
+
+async def test_logout_allows_new_login_and_invalidates_old_token(client: AsyncClient):
+    email, password = "logout@example.com", "pass123"
+    old_access_token, _ = await register_user(client, email, password, "Logout")
+
+    logout_resp = await client.post(
+        "/auth/logout", headers={"Authorization": f"Bearer {old_access_token}"}
+    )
+    assert logout_resp.status_code == 204
+
+    login_resp = await client.post(
+        "/auth/login", json={"email": email, "password": password}
+    )
+    assert login_resp.status_code == 200
+
+    old_session_resp = await client.get(
+        "/users/me", headers={"Authorization": f"Bearer {old_access_token}"}
+    )
+    assert old_session_resp.status_code == 401
+
 
 async def test_login_wrong_password(client: AsyncClient):
     email = "wrong@example.com"

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Query, status
 from schemas.user import UpdateUserRequest, UserMeResponse, UserResponse
 from storage.database import Database
 from utils.jwt import get_current_user
+from services.llm.partner_matching_service import rank_matching_users
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
@@ -14,7 +15,8 @@ async def match_users(
     db: Database = Depends(Database.get_db),
 ):
     matched = await db.users.get_matched_users(current_user)
-    return matched[:limit]
+    ranked = await rank_matching_users(current_user, list(matched))
+    return ranked[:limit]
 
 
 @router.get("/me", response_model=UserMeResponse)

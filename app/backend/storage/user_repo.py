@@ -22,6 +22,11 @@ class UserRepository:
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
+    async def get_user_by_email_for_update(self, email: str) -> User | None:
+        query = select(User).where(User.email == email).with_for_update()
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
     async def get_user_by_email_insensitive(self, email: str) -> User | None:
         """Look up a user by email ignoring case (e.g. for invitations)."""
         query = select(User).where(func.lower(User.email) == email.lower())
@@ -43,6 +48,12 @@ class UserRepository:
             setattr(user, key, value)
         user.updated_at = datetime.now()
         await self.session.commit()
+        return user
+
+    async def save_user(self, user: User) -> User:
+        user.updated_at = datetime.now()
+        await self.session.commit()
+        await self.session.refresh(user)
         return user
 
     async def delete_user(self, user_id: int) -> bool:

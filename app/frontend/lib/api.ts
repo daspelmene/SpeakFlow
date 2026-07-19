@@ -129,6 +129,13 @@ export function loginUser(payload: LoginPayload) {
   });
 }
 
+export function logoutUser() {
+  return request<void>("/api/v1/auth/logout", {
+    method: "POST",
+    headers: getAuthHeaders(),
+  });
+}
+
 export function getCurrentUser() {
   return request<UserMe>("/api/v1/users/me", {
     method: "GET",

@@ -1,10 +1,14 @@
-import type { SessionTemplate } from "@/lib/sessionTemplateApi";
+import type {
+  SessionTemplate,
+  SessionTemplatesByLearnerSlot,
+} from "@/lib/sessionTemplateApi";
 
-const STORAGE_PREFIX = "speakflow_session_ui_snapshot";
+const STORAGE_PREFIX = "speakflow_session_ui_snapshot_v2";
 
 type SessionUiSnapshot = {
   roomId: string;
-  sessionTemplate: SessionTemplate;
+  sessionTemplate?: SessionTemplate;
+  learnerTemplates?: SessionTemplatesByLearnerSlot;
   savedAt: number;
 };
 
@@ -20,9 +24,12 @@ export function saveSessionUiSnapshot(
     return;
   }
 
+  const previousSnapshot = readSnapshot(roomId);
+
   const snapshot: SessionUiSnapshot = {
     roomId,
     sessionTemplate,
+    learnerTemplates: previousSnapshot?.learnerTemplates,
     savedAt: Date.now(),
   };
 
@@ -30,6 +37,38 @@ export function saveSessionUiSnapshot(
 }
 
 export function getSessionUiSnapshot(roomId: string) {
+  const snapshot = readSnapshot(roomId);
+
+  return snapshot?.sessionTemplate ?? null;
+}
+
+export function saveLearnerSessionTemplates(
+  roomId: string,
+  learnerTemplates: SessionTemplatesByLearnerSlot,
+) {
+  if (typeof window === "undefined" || !roomId) {
+    return;
+  }
+
+  const previousSnapshot = readSnapshot(roomId);
+
+  const snapshot: SessionUiSnapshot = {
+    roomId,
+    sessionTemplate: previousSnapshot?.sessionTemplate,
+    learnerTemplates,
+    savedAt: Date.now(),
+  };
+
+  window.localStorage.setItem(getStorageKey(roomId), JSON.stringify(snapshot));
+}
+
+export function getLearnerSessionTemplates(roomId: string) {
+  const snapshot = readSnapshot(roomId);
+
+  return snapshot?.learnerTemplates ?? null;
+}
+
+function readSnapshot(roomId: string) {
   if (typeof window === "undefined" || !roomId) {
     return null;
   }
@@ -43,11 +82,11 @@ export function getSessionUiSnapshot(roomId: string) {
   try {
     const parsed = JSON.parse(raw) as Partial<SessionUiSnapshot>;
 
-    if (!parsed.sessionTemplate) {
+    if (!parsed || typeof parsed !== "object") {
       return null;
     }
 
-    return parsed.sessionTemplate;
+    return parsed;
   } catch {
     window.localStorage.removeItem(getStorageKey(roomId));
     return null;
